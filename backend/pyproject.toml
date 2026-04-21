@@ -1,0 +1,8 @@
+[project]
+name = "yzta-p2p-rag-project"
+version = "0.1.0"
+requires-python = "==3.13.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"

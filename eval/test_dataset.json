@@ -1,0 +1,8 @@
+# Değerlendirme veri seti: Soru, beklenen cevap ve beklenen kaynak ID'lerini içerir.
+[
+  {
+    "question": "Örnek bir soru?",
+    "ground_truth_answer": "Beklenen doğru cevap budur.",
+    "ground_truth_context_ids": ["doc_id_1"]
+  }
+]

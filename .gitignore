@@ -1,0 +1,47 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+.venv/
+venv/
+env/
+
+# ===== Node.js =====
+node_modules/
+frontend/node_modules/
+.next/
+
+# ===== IDE =====
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ===== Ortam Degiskenleri =====
+.env
+.env.local
+.env.production
+
+# ===== Yuklenen Dosyalar (disk uzerindekiler) =====
+uploads/
+backend/uploads/
+
+# ===== Model Dosyalari (cok buyuk, Git'e girmemeli) =====
+*.bin
+*.safetensors
+*.onnx
+models/
+
+# ===== Docker =====
+docker-compose.override.yml
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+
+# ===== Log =====
+*.log
+logs/
