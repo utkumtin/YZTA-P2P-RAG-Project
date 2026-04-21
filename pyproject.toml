@@ -1,0 +1,28 @@
+[project]
+name = "yzta-p2p-rag-project"
+version = "0.1.0"
+requires-python = "==3.13.12"
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+src = ["backend"]
+
+[tool.ruff.lint]
+select = [
+    "E",     # pycodestyle errors
+    "W",     # pycodestyle warnings
+    "F",     # pyflakes
+    "I",     # isort (import siralamasi)
+    "N",     # pep8-naming
+    "UP",    # pyupgrade
+    "B",     # flake8-bugbear
+    "SIM",   # flake8-simplify
+    "TCH",   # flake8-type-checking
+]
+ignore = [
+    "E501",  # Satir uzunlugu — ruff formatter halleder
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]

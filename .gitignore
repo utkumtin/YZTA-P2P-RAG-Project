@@ -1,81 +1,47 @@
-# ─── Python ───────────────────────────────────────────────
+# ===== Python =====
 __pycache__/
 *.py[cod]
-*.pyo
-*.pyd
-*.so
-*.egg
 *.egg-info/
 dist/
 build/
-.eggs/
-.mypy_cache/
-.ruff_cache/
-.dmypy.json
-dmypy.json
-
-# ─── Virtual environments ─────────────────────────────────
+*.egg
 .venv/
 venv/
 env/
-ENV/
 
-# ─── Environment & secrets ────────────────────────────────
-.env
-.env.local
-.env.*.local
-*.pem
-*.key
-
-# ─── Testing & coverage ───────────────────────────────────
-.pytest_cache/
-.coverage
-coverage.xml
-htmlcov/
-.tox/
-
-# ─── Node / Frontend ──────────────────────────────────────
+# ===== Node.js =====
 node_modules/
-frontend/dist/
-frontend/build/
-frontend/.vite/
-*.local
+frontend/node_modules/
+.next/
 
-# ─── Logs ─────────────────────────────────────────────────
-*.log
-logs/
-*.log.*
-
-# ─── Docker ───────────────────────────────────────────────
-.dockerignore
-
-# ─── Uploads / user data ──────────────────────────────────
-uploads/
-data/
-*.pdf
-*.docx
-*.xlsx
-
-# ─── Vector DB / ML artifacts ─────────────────────────────
-*.faiss
-*.index
-*.pkl
-*.bin
-*.pt
-*.ckpt
-models/
-embeddings_cache/
-
-# ─── OS ───────────────────────────────────────────────────
-.DS_Store
-Thumbs.db
-desktop.ini
-
-# ─── IDE ──────────────────────────────────────────────────
+# ===== IDE =====
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# ─── Redis ────────────────────────────────────────────────
-dump.rdb
+# ===== Ortam Degiskenleri =====
+.env
+.env.local
+.env.production
+
+# ===== Yuklenen Dosyalar (disk uzerindekiler) =====
+uploads/
+backend/uploads/
+
+# ===== Model Dosyalari (cok buyuk, Git'e girmemeli) =====
+*.bin
+*.safetensors
+*.onnx
+models/
+
+# ===== Docker =====
+docker-compose.override.yml
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+
+# ===== Log =====
+*.log
+logs/
