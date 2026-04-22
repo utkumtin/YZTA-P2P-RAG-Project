@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings
 from functools import lru_cache
+from typing import List
 
 
 class Settings(BaseSettings):
@@ -17,7 +18,7 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""
 
     MAX_FILE_SIZE_MB: int = 50
-    ALLOWED_EXTENSIONS: list[str] = ["pdf", "docx", "doc", "txt"]
+    ALLOWED_EXTENSIONS: List[str] = ["pdf", "docx", "doc", "txt"]
 
     UPLOAD_DIR: str = "/tmp/uploads"
 
