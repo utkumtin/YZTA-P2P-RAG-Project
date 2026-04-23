@@ -1,11 +1,7 @@
 """
-FAZ 3 Testleri — Ebeveyn-Çocuk (Parent-Child) Chunking
-
-THE_BRAIN Rehber: Bölüm 6.4 — Test Et — FAZ 3
-
 Test senaryoları:
 1. Temel fonksiyonellik: parçalar oluştu mu?
-2. Ebeveyn-çocuk ilişkisi: her çocuğun ebeveyni var mı?
+2. Parent-child ilişkisi: her child'ın parent'ı var mı?
 3. Token boyutu kontrolleri: sınırlar aşılıyor mu?
 4. Metadata bütünlüğü: gerekli alanlar var mı?
 5. Edge case: çok kısa metin
@@ -14,16 +10,14 @@ Test senaryoları:
 8. ID formatı: "parent-xxx-0001" ve "child-xxx-0001-000" formatı
 """
 
-import uuid
-
 import pytest
 
 from app.core.chunker import _token_length, create_parent_child_chunks
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Yardımcı fixture'lar
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def sample_metadata() -> dict:
@@ -64,22 +58,23 @@ def short_text() -> str:
 # Test 1: Temel fonksiyonellik
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestBasicFunctionality:
     """Temel chunk üretimi testleri."""
 
     def test_chunks_are_produced(self, long_text, sample_metadata):
-        """Uzun metinden ebeveyn ve çocuk chunk üretilmeli."""
+        """Uzun metinden parent ve child chunk üretilmeli."""
         parents, children = create_parent_child_chunks(long_text, sample_metadata)
 
-        assert len(parents) > 0, "Ebeveyn chunk üretilmedi"
-        assert len(children) > 0, "Çocuk chunk üretilmedi"
+        assert len(parents) > 0, "Parent chunk üretilmedi"
+        assert len(children) > 0, "Child chunk üretilmedi"
 
     def test_children_outnumber_parents(self, long_text, sample_metadata):
-        """Her ebeveynden en az 1 çocuk çıkmalı → toplam çocuk ≥ ebeveyn."""
+        """Her parent'tan en az 1 child çıkmalı → toplam child ≥ parent."""
         parents, children = create_parent_child_chunks(long_text, sample_metadata)
 
         assert len(children) >= len(parents), (
-            f"Çocuk sayısı ({len(children)}) ebeveyn sayısından ({len(parents)}) az olamaz"
+            f"Child sayısı ({len(children)}) parent sayısından ({len(parents)}) az olamaz"
         )
 
     def test_returns_tuple_of_two_lists(self, long_text, sample_metadata):
@@ -109,11 +104,12 @@ class TestBasicFunctionality:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Test 2: Ebeveyn-Çocuk İlişkisi
+# Test 2: Parent-Child İlişkisi
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestParentChildRelationship:
-    """Ebeveyn-çocuk bağlantısı ve referans bütünlüğü testleri."""
+    """Parent-child bağlantısı ve referans bütünlüğü testleri."""
 
     def test_every_child_has_valid_parent(self, long_text, sample_metadata):
         """Her çocuğun parent_chunk_id'si gerçek bir ebeveyne işaret etmeli."""
@@ -124,23 +120,23 @@ class TestParentChildRelationship:
         for child in children:
             pid = child["metadata"]["parent_chunk_id"]
             assert pid in parent_ids, (
-                f"Çocuk '{child['id']}' için geçersiz parent_chunk_id: '{pid}'"
+                f"Child '{child['id']}' için geçersiz parent_chunk_id: '{pid}'"
             )
 
     def test_children_grouped_under_parents(self, long_text, sample_metadata):
-        """Her ebeveyn en az bir çocuğa sahip olmalı."""
+        """Her parent'ın en az bir child'ı olmalı."""
         parents, children = create_parent_child_chunks(long_text, sample_metadata)
 
         parent_ids_with_children = {c["metadata"]["parent_chunk_id"] for c in children}
 
         for parent in parents:
             assert parent["id"] in parent_ids_with_children, (
-                f"Ebeveyn '{parent['id']}' için hiç çocuk üretilmedi"
+                f"Parent '{parent['id']}' için hiç child üretilmedi"
             )
 
     def test_child_parent_id_references_correct_parent(self, long_text, sample_metadata):
         """
-        Çocuğun parent_chunk_id'si, ID formatına göre doğru ebeveyne işaret etmeli.
+        Child'ın parent_chunk_id'si, ID formatına göre doğru parent'a işaret etmeli.
 
         Örnek:
             child-test-doc-001-0002-001 → parent-test-doc-001-0002
@@ -160,26 +156,24 @@ class TestParentChildRelationship:
 # Test 3: Token Boyutu Kontrolleri
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestTokenSizeLimits:
     """Chunk boyutları PRD'de belirtilen sınırlar içinde olmalı."""
 
     def test_child_chunks_within_size_limit(self, long_text, sample_metadata):
         """
-        Çocuk chunk'lar 200 token sınırını aşmamalı.
+        Child chunk'lar 200 token sınırını aşmamalı.
         Overlap toleransı ile max 260 token kabul edilir.
         """
         _, children = create_parent_child_chunks(long_text, sample_metadata)
 
         for child in children:
             tokens = _token_length(child["text"])
-            assert tokens <= 260, (
-                f"Çocuk chunk çok büyük: {tokens} token "
-                f"(chunk: '{child['id']}')"
-            )
+            assert tokens <= 260, f"Child chunk çok büyük: {tokens} token (chunk: '{child['id']}')"
 
     def test_parent_chunks_within_size_limit(self, long_text, sample_metadata):
         """
-        Ebeveyn chunk'lar 800 token sınırını aşmamalı.
+        Parent chunk'lar 800 token sınırını aşmamalı.
         Overlap toleransı ile max 950 token kabul edilir.
         """
         parents, _ = create_parent_child_chunks(long_text, sample_metadata)
@@ -187,20 +181,19 @@ class TestTokenSizeLimits:
         for parent in parents:
             tokens = _token_length(parent["text"])
             assert tokens <= 950, (
-                f"Ebeveyn chunk çok büyük: {tokens} token "
-                f"(chunk: '{parent['id']}')"
+                f"Parent chunk çok büyük: {tokens} token (chunk: '{parent['id']}')"
             )
 
     def test_child_smaller_than_parent_on_average(self, long_text, sample_metadata):
-        """Ortalama çocuk boyutu ortalama ebeveyn boyutundan küçük olmalı."""
+        """Ortalama child boyutu ortalama parent boyutundan küçük olmalı."""
         parents, children = create_parent_child_chunks(long_text, sample_metadata)
 
         avg_parent = sum(_token_length(p["text"]) for p in parents) / len(parents)
         avg_child = sum(_token_length(c["text"]) for c in children) / len(children)
 
         assert avg_child < avg_parent, (
-            f"Çocuk ortalama ({avg_child:.0f} token) "
-            f"ebeveyn ortalamasından ({avg_parent:.0f} token) küçük olmalı"
+            f"Child ortalama ({avg_child:.0f} token) "
+            f"parent ortalamasından ({avg_parent:.0f} token) küçük olmalı"
         )
 
     def test_custom_chunk_sizes_respected(self, long_text, sample_metadata):
@@ -217,56 +210,60 @@ class TestTokenSizeLimits:
         for child in children:
             tokens = _token_length(child["text"])
             # 100 + küçük tolerans
-            assert tokens <= 140, (
-                f"Özel boyutlu çocuk chunk çok büyük: {tokens} token"
-            )
+            assert tokens <= 140, f"Özel boyutlu child chunk çok büyük: {tokens} token"
 
         for parent in parents:
             tokens = _token_length(parent["text"])
             # 400 + küçük tolerans
-            assert tokens <= 490, (
-                f"Özel boyutlu ebeveyn chunk çok büyük: {tokens} token"
-            )
+            assert tokens <= 490, f"Özel boyutlu parent chunk çok büyük: {tokens} token"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Test 4: Metadata Bütünlüğü
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestMetadataIntegrity:
     """Chunk metadata alanlarının eksiksizliği."""
 
     def test_child_metadata_has_required_fields(self, long_text, sample_metadata):
-        """Her çocuk chunk doğru metadata alanlarına sahip olmalı."""
+        """Her child chunk doğru metadata alanlarına sahip olmalı."""
         _, children = create_parent_child_chunks(long_text, sample_metadata)
 
         required_fields = {
-            "doc_id", "filename", "file_type", "language",
-            "session_id", "chunk_type", "chunk_index", "parent_chunk_id",
+            "doc_id",
+            "filename",
+            "file_type",
+            "language",
+            "session_id",
+            "chunk_type",
+            "chunk_index",
+            "parent_chunk_id",
         }
 
         for child in children:
             meta = child["metadata"]
             missing = required_fields - set(meta.keys())
-            assert not missing, (
-                f"Çocuk '{child['id']}' metadata'sında eksik alanlar: {missing}"
-            )
+            assert not missing, f"Child '{child['id']}' metadata'sında eksik alanlar: {missing}"
 
     def test_parent_metadata_has_required_fields(self, long_text, sample_metadata):
-        """Her ebeveyn chunk doğru metadata alanlarına sahip olmalı."""
+        """Her parent chunk doğru metadata alanlarına sahip olmalı."""
         parents, _ = create_parent_child_chunks(long_text, sample_metadata)
 
         required_fields = {
-            "doc_id", "filename", "file_type", "language",
-            "session_id", "chunk_type", "chunk_index",
+            "doc_id",
+            "filename",
+            "file_type",
+            "language",
+            "session_id",
+            "chunk_type",
+            "chunk_index",
         }
 
         for parent in parents:
             meta = parent["metadata"]
             missing = required_fields - set(meta.keys())
-            assert not missing, (
-                f"Ebeveyn '{parent['id']}' metadata'sında eksik alanlar: {missing}"
-            )
+            assert not missing, f"Parent '{parent['id']}' metadata'sında eksik alanlar: {missing}"
 
     def test_chunk_type_values_correct(self, long_text, sample_metadata):
         """chunk_type değerleri sadece 'parent' veya 'child' olmalı."""
@@ -274,12 +271,12 @@ class TestMetadataIntegrity:
 
         for parent in parents:
             assert parent["metadata"]["chunk_type"] == "parent", (
-                f"Ebeveyn chunk_type yanlış: {parent['metadata']['chunk_type']}"
+                f"Parent chunk_type yanlış: {parent['metadata']['chunk_type']}"
             )
 
         for child in children:
             assert child["metadata"]["chunk_type"] == "child", (
-                f"Çocuk chunk_type yanlış: {child['metadata']['chunk_type']}"
+                f"Child chunk_type yanlış: {child['metadata']['chunk_type']}"
             )
 
     def test_metadata_propagated_from_doc_metadata(self, long_text, sample_metadata):
@@ -294,27 +291,26 @@ class TestMetadataIntegrity:
                 )
 
     def test_chunk_index_is_sequential(self, long_text, sample_metadata):
-        """Ebeveyn chunk_index değerleri 0'dan başlayıp sıralı olmalı."""
+        """Parent chunk_index değerleri 0'dan başlayıp sıralı olmalı."""
         parents, _ = create_parent_child_chunks(long_text, sample_metadata)
 
         indices = [p["metadata"]["chunk_index"] for p in parents]
         expected = list(range(len(parents)))
 
-        assert indices == expected, (
-            f"Ebeveyn chunk_index sıralı değil. Gelen: {indices}"
-        )
+        assert indices == expected, f"Parent chunk_index sıralı değil. Gelen: {indices}"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Test 5: ID Formatı
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestIDFormat:
     """Chunk ID formatı doğrulaması."""
 
     def test_parent_id_format(self, long_text, sample_metadata):
         """
-        Ebeveyn ID formatı: "parent-{doc_id}-{4 haneli sıra}"
+        Parent ID formatı: "parent-{doc_id}-{4 haneli sıra}"
         Örnek: "parent-test-doc-001-0000"
         """
         parents, _ = create_parent_child_chunks(long_text, sample_metadata)
@@ -323,13 +319,12 @@ class TestIDFormat:
         for i, parent in enumerate(parents):
             expected_id = f"parent-{doc_id}-{i:04d}"
             assert parent["id"] == expected_id, (
-                f"Ebeveyn ID formatı yanlış. "
-                f"Beklenen: '{expected_id}', Gelen: '{parent['id']}'"
+                f"Parent ID formatı yanlış. Beklenen: '{expected_id}', Gelen: '{parent['id']}'"
             )
 
     def test_child_id_format(self, long_text, sample_metadata):
         """
-        Çocuk ID formatı: "child-{doc_id}-{4 haneli ebeveyn sıra}-{3 haneli çocuk sıra}"
+        Child ID formatı: "child-{doc_id}-{4 haneli parent sıra}-{3 haneli child sıra}"
         Örnek: "child-test-doc-001-0000-000"
         """
         parents, children = create_parent_child_chunks(long_text, sample_metadata)
@@ -338,18 +333,16 @@ class TestIDFormat:
         # Her çocuğun ID'si kendi format kuralına uymalı
         for child in children:
             cid = child["id"]
-            assert cid.startswith(f"child-{doc_id}-"), (
-                f"Çocuk ID öneki yanlış: '{cid}'"
-            )
+            assert cid.startswith(f"child-{doc_id}-"), f"Child ID öneki yanlış: '{cid}'"
             # child-{doc_id}-XXXX-YYY formatı
             parts = cid.split("-")
             # Son iki segment 4 ve 3 haneli rakam olmalı
             # (doc_id'de de - olabileceğinden son iki segment kontrol edilir)
             assert parts[-1].isdigit() and len(parts[-1]) == 3, (
-                f"Çocuk ID son segmenti 3 haneli sayı olmalı: '{cid}'"
+                f"Child ID son segmenti 3 haneli sayı olmalı: '{cid}'"
             )
             assert parts[-2].isdigit() and len(parts[-2]) == 4, (
-                f"Çocuk ID ebeveyn segmenti 4 haneli sayı olmalı: '{cid}'"
+                f"Child ID parent segmenti 4 haneli sayı olmalı: '{cid}'"
             )
 
     def test_all_chunk_ids_unique(self, long_text, sample_metadata):
@@ -357,14 +350,13 @@ class TestIDFormat:
         parents, children = create_parent_child_chunks(long_text, sample_metadata)
 
         all_ids = [c["id"] for c in parents + children]
-        assert len(all_ids) == len(set(all_ids)), (
-            "Yinelenen chunk ID'si tespit edildi!"
-        )
+        assert len(all_ids) == len(set(all_ids)), "Yinelenen chunk ID'si tespit edildi!"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Test 6: Edge Cases
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestEdgeCases:
     """Sınır durumları ve hata senaryoları."""
@@ -424,6 +416,7 @@ class TestEdgeCases:
 # ─────────────────────────────────────────────────────────────────────────────
 # Test 7: _token_length yardımcı fonksiyonu
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestTokenLength:
     """_token_length yardımcı fonksiyonu testleri."""
