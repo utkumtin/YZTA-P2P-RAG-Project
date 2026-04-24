@@ -3,6 +3,8 @@ from typing import List
 import uuid
 import os
 import aiofiles
+from arq import create_pool
+from arq.connections import RedisSettings
 
 from app.config import get_settings
 from app.services.document_service import DocumentUploadResponse
@@ -28,6 +30,10 @@ async def upload_documents( files: List[UploadFile] = File(...),
     session_id: str = "default"):
     responses = []
 
+    redis_pool = await create_pool(
+        RedisSettings(host=settings.REDIS_HOST, port=settings.REDIS_PORT)
+    )
+
     for file in files:
         ext = validate_file(file)
         document_id = str(uuid.uuid4())
@@ -37,6 +43,7 @@ async def upload_documents( files: List[UploadFile] = File(...),
             contents = await file.read()
             async with aiofiles.open(save_path, "wb") as f:
                 await f.write(contents)
+            await redis_pool.enqueue_job('process_document_task', document_id, save_path)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Dosya kaydedilemedi: {str(e)}")
 
