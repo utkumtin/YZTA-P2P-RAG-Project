@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 import os
 
 from app.config import get_settings
-from app.api.routes import  documents, chat, summarize  #,health
+from app.api.routes import  documents, chat, summarize ,health , upload
 
 settings = get_settings()
 
@@ -30,7 +30,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-#app.include_router(health.router, prefix="/api/v1/health", tags=["health"])
-app.include_router(documents.router, prefix="/api/v1/documents", tags=["documents"])
-app.include_router(chat.router, prefix="/api/v1/chat", tags=["chat"])
-app.include_router(summarize.router, prefix="/api/v1/summarize", tags=["summarize"])
+app.include_router(health.router,    prefix="/api/routes/health",    tags=["health"])
+app.include_router(documents.router, prefix="/api/routes/documents", tags=["documents"])
+app.include_router(upload.router,    prefix="/api/routes/upload",    tags=["upload"])
+app.include_router(chat.router,      prefix="/api/routes/chat",      tags=["chat"])
+app.include_router(summarize.router, prefix="/api/routes/summarize", tags=["summarize"])

@@ -8,19 +8,41 @@ class Settings(BaseSettings):
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = False
 
-    QDRANT_URL: str = "http://localhost:6333"
-    QDRANT_API_KEY: str = ""
+    # LLM
+    LLM_PROVIDER: str = "groq"
+    GROQ_API_KEY: str = ""
+    GOOGLE_API_KEY: str = ""
+
+    # Embedding ve Reranker
+    EMBEDDING_MODEL: str = "BAAI/bge-m3"
+    EMBEDDING_BATCH_SIZE: int = 32
+    RERANKER_MODEL: str = "BAAI/bge-reranker-v2-m3"
+    RERANKER_TOP_K: int = 5
+
+    # Qdrant
+    QDRANT_HOST: str = "localhost"
+    QDRANT_PORT: int = 6333
+    QDRANT_GRPC_PORT: int = 6334
     QDRANT_COLLECTION: str = "documents"
 
-    REDIS_URL: str = "redis://localhost:6379"
+    # Redis
+    REDIS_HOST: str = "localhost"
+    REDIS_PORT: int = 6379
+    REDIS_DB: int = 0
 
-    GROQ_API_KEY: str = ""
-    GEMINI_API_KEY: str = ""
+    # RAG Pipeline
+    PARENT_CHUNK_SIZE: int = 800
+    PARENT_CHUNK_OVERLAP: int = 100
+    CHILD_CHUNK_SIZE: int = 200
+    CHILD_CHUNK_OVERLAP: int = 50
+    HYBRID_SEARCH_TOP_K: int = 20
+    FINAL_TOP_K: int = 5
 
+    # Sistem
     MAX_FILE_SIZE_MB: int = 50
     ALLOWED_EXTENSIONS: List[str] = ["pdf", "docx", "doc", "txt"]
+    UPLOAD_DIR: str = "/app/uploads"
 
-    UPLOAD_DIR: str = "/tmp/uploads"
 
     class Config:
         env_file = ".env"

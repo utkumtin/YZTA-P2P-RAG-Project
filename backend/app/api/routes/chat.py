@@ -31,12 +31,20 @@ async def chat_stream(request: ChatRequest):
     async def event_generator():
         # streaming rag buraya baglanacak
         # async for chunk in rag_service.stream(request.question):
-        #     yield f"data: {json.dumps({'chunk': chunk})}\n\n"
+        #     yield f"data: {json.dumps({'type': 'token', 'content': chunk})}\n\n"
 
         words = ["ML", " pipeline", " henüz", " bağlanmadı."]
         for word in words:
-            yield f"data: {json.dumps({'chunk': word})}\n\n"
+            yield f"data: {json.dumps({'type': 'token', 'content': word})}\n\n"
             await asyncio.sleep(0.05)
-        yield "data: [DONE]\n\n"
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+    )
