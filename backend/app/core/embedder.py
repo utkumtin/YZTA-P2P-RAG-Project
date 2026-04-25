@@ -8,7 +8,10 @@ Kütüphane: FlagEmbedding
 ÖNEMLİ: Bu sınıftan SADECE BİR TANE oluştur (Singleton pattern).
 """
 
-from FlagEmbedding import BGEM3FlagModel
+import numpy as np
+from typing import Optional
+
+_instance: Optional["Embedder"] = None
 
 
 class Embedder:
@@ -34,18 +37,18 @@ class Embedder:
         model_name: str = "BAAI/bge-m3",
         use_fp16: bool = True,
     ):
-        """
-        BGE-M3 modelini yükler.
+        self._model_name = model_name
+        self._use_fp16 = use_fp16
+        self._model = None
 
-        Args:
-            model_name: Hugging Face model adı.
-            use_fp16: True = yarım hassasiyet (16-bit float).
-                      Bellek tüketimini %50 azaltır.
-                      Doğruluk kaybı ihmal edilebilir düzeyde.
-                      8GB RAM'de ZORUNLU, 16GB'de önerilen.
-        """
-        self.model = BGEM3FlagModel(model_name, use_fp16=use_fp16)
-        self.model_name = model_name
+    def _load(self):
+        if self._model is not None:
+            return
+        from FlagEmbedding import BGEM3FlagModel
+        try:
+            self._model = BGEM3FlagModel(self._model_name, use_fp16=self._use_fp16)
+        except Exception:
+            self._model = BGEM3FlagModel(self._model_name, use_fp16=False)
 
     def encode(
         self,
@@ -70,11 +73,12 @@ class Embedder:
                 "sparse": list[dict]         # Her metin için {token_id: weight} sözlüğü
             }
         """
+        self._load()
         # FlagEmbedding boş listede crash ettiği için erken dönüş yapıyoruz.
         if not texts:
             return {"dense": [], "sparse": []}
 
-        embeddings = self.model.encode(
+        embeddings = self._model.encode(
             texts,
             batch_size=batch_size,
             return_dense=True,
@@ -113,3 +117,20 @@ class Embedder:
             "dense": result["dense"][0],
             "sparse": result["sparse"][0],
         }
+
+    def embed(self, text: str) -> np.ndarray:
+        self._load()
+        result = self._model.encode([text], batch_size=1)
+        return result["dense_vecs"][0].astype(np.float32)
+
+    def embed_batch(self, texts: list[str]) -> np.ndarray:
+        self._load()
+        result = self._model.encode(texts, batch_size=32)
+        return result["dense_vecs"].astype(np.float32)
+
+
+def get_embedder() -> Embedder:
+    global _instance
+    if _instance is None:
+        _instance = Embedder()
+    return _instance

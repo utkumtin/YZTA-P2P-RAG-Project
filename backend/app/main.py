@@ -14,7 +14,38 @@ async def lifespan(app: FastAPI):
     os.environ.setdefault("HF_HOME", settings.HF_HOME)
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     os.makedirs(settings.HF_HOME, exist_ok=True)
+
+    app.state.semantic_cache = None
+    if settings.SEMANTIC_CACHE_ENABLED:
+        try:
+            import redis.asyncio as aioredis
+            from app.core.embedder import get_embedder
+            from app.core.semantic_cache import SemanticCache
+
+            redis_client = aioredis.from_url(
+                f"redis://{settings.REDIS_HOST}:{settings.REDIS_PORT}/{settings.REDIS_DB}"
+            )
+            embedder = get_embedder()
+            sc = SemanticCache(
+                redis_client=redis_client,
+                embedder=embedder,
+                threshold=settings.SEMANTIC_CACHE_THRESHOLD,
+                ttl=settings.SEMANTIC_CACHE_TTL,
+                max_size=settings.SEMANTIC_CACHE_MAX_SIZE,
+            )
+            await sc.load_from_redis()
+            app.state.semantic_cache = sc
+            app.state.redis_client = redis_client
+        except Exception:
+            pass
+
     yield
+
+    if hasattr(app.state, "redis_client") and app.state.redis_client is not None:
+        try:
+            await app.state.redis_client.aclose()
+        except Exception:
+            pass
 
 
 app = FastAPI(
