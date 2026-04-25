@@ -35,8 +35,8 @@ def sample_metadata() -> dict:
 def long_text() -> str:
     """
     ~2000+ token uzunluğunda test metni.
-    Chunking'in ebeveyn ve çocuk parçalar üretebilmesi için
-    en az bir ebeveyn boyutu (800 token) kadar metin lazım.
+    Chunking'in parent ve child parçalar üretebilmesi için
+    en az bir parent boyutu (800 token) kadar metin lazım.
     """
     # ~14 kelime × ~1.5 token/kelime × 100 tekrar ≈ ~2100 token
     sentence = (
@@ -50,7 +50,7 @@ def long_text() -> str:
 
 @pytest.fixture
 def short_text() -> str:
-    """200 tokendan kısa metin — tek bir çocuk chunk üretmeli."""
+    """200 tokendan kısa metin — tek bir child chunk üretmeli."""
     return "Bu kısa bir test metnidir. Sadece birkaç cümle içerir."
 
 
@@ -112,7 +112,7 @@ class TestParentChildRelationship:
     """Parent-child bağlantısı ve referans bütünlüğü testleri."""
 
     def test_every_child_has_valid_parent(self, long_text, sample_metadata):
-        """Her çocuğun parent_chunk_id'si gerçek bir ebeveyne işaret etmeli."""
+        """Her child'ın parent_chunk_id'si gerçek bir parent'a işaret etmeli."""
         parents, children = create_parent_child_chunks(long_text, sample_metadata)
 
         parent_ids = {p["id"] for p in parents}
@@ -148,7 +148,7 @@ class TestParentChildRelationship:
         for child in children:
             parent_id = child["metadata"]["parent_chunk_id"]
             assert parent_id in parent_map, (
-                f"'{child['id']}' çocuğunun referans ettiği '{parent_id}' ebeveyni bulunamadı"
+                f"'{child['id']}' child'ının referans ettiği '{parent_id}' parent'ı bulunamadı"
             )
 
 
@@ -375,8 +375,8 @@ class TestEdgeCases:
         """Kısa metin (< 200 token) en az bir chunk üretmeli."""
         parents, children = create_parent_child_chunks(short_text, sample_metadata)
 
-        assert len(parents) >= 1, "Kısa metin en az 1 ebeveyn üretmeli"
-        assert len(children) >= 1, "Kısa metin en az 1 çocuk üretmeli"
+        assert len(parents) >= 1, "Kısa metin en az 1 parent üretmeli"
+        assert len(children) >= 1, "Kısa metin en az 1 child üretmeli"
 
     def test_missing_doc_id_generates_uuid(self, long_text):
         """doc_id yoksa UUID otomatik üretilmeli, hata verilmemeli."""

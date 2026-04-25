@@ -4,11 +4,11 @@ Parent-Child chunker modülü.
 Mantık:
 - Parent: 800 token, geniş bağlam → LLM'e gönderilir
 - Child: 200 token, spesifik bilgi → Vektör aramasında kullanılır
-- Arama çocukta yapılır, LLM'e ebeveyn gönderilir
+- Arama child'da yapılır, LLM'e parent gönderilir
 
 ID Formatı:
 - Parent: "parent-{doc_id}-{sıra_no}"        → "parent-abc123-0001"
-- Child:   "child-{doc_id}-{ebeveyn_sıra}-{çocuk_sıra}" → "child-abc123-0001-002"
+- Child:   "child-{doc_id}-{parent_index}-{child_index}" → "child-abc123-0001-002"
 """
 
 import uuid
@@ -81,7 +81,7 @@ def create_parent_child_chunks(
         Her parent_chunk:
         {
             "id": "parent-{doc_id}-0001",
-            "text": "ebeveyn metin...",
+            "text": "parent metin...",
             "metadata": {
                 ...doc_metadata,         # doc_id, filename, file_type, language, session_id
                 "chunk_type": "parent",
@@ -143,7 +143,7 @@ def create_parent_child_chunks(
     )
 
     # ─────────────────────────────────────────────────────────────────────────
-    # AŞAMA 1: Ebeveyn parçalar oluştur
+    # AŞAMA 1: Parent parçalar oluştur
     # ─────────────────────────────────────────────────────────────────────────
     parent_texts = parent_splitter.split_text(full_text)
     parent_chunks: list[dict] = []
@@ -174,7 +174,7 @@ def create_parent_child_chunks(
         child_texts = child_splitter.split_text(parent_text)
 
         for j, child_text in enumerate(child_texts):
-            # Child ID: "child-{doc_id}-{parent_sıra}-{child_sıra}"
+            # Child ID: "child-{doc_id}-{parent_index}-{child_index}"
             # Örnek: "child-550e8400-0003-002"
             child_id = f"child-{doc_id}-{i:04d}-{j:03d}"
 

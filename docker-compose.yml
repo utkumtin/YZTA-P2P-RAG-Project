@@ -1,3 +1,4 @@
+name: p2p-rag-project
 services:
   backend:
     build:

@@ -1,6 +1,6 @@
 fastapi==0.115.12
 uvicorn[standard]==0.34.0
-pydantic==2.11.3
+pydantic==2.11.5
 pydantic-settings==2.9.1
 aiofiles==24.1.0
 python-multipart==0.0.20
@@ -17,6 +17,6 @@ python-docx==1.2.0
 python-magic==0.4.27
 qdrant-client==1.17.1
 ragas==0.4.3
-redis==7.4.0
+redis==5.2.1
 surya-ocr==0.17.1
 tiktoken==0.12.0
