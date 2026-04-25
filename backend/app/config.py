@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     HYBRID_SEARCH_TOP_K: int = 20
     FINAL_TOP_K: int = 5
 
+    # Semantic Cache
+    SEMANTIC_CACHE_ENABLED: bool = True
+    SEMANTIC_CACHE_THRESHOLD: float = 0.92
+    SEMANTIC_CACHE_TTL: int = 3600
+    SEMANTIC_CACHE_MAX_SIZE: int = 1000
+
     # Sistem
     MAX_FILE_SIZE_MB: int = 50
     ALLOWED_EXTENSIONS: List[str] = ["pdf", "docx", "doc", "txt"]
