@@ -362,6 +362,49 @@ class VectorStore:
             }
         return None
 
+    def get_parents_by_doc_id(self, doc_id: str, session_id: str) -> list[dict]:
+        """
+        Bir dokümana ait tüm parent chunk'ları döndürür.
+
+        Özetleme pipeline'ında kullanılır: doküman içeriğinin tamamını
+        LLM'e göndermek için tüm parent chunk'lar çekilir.
+
+        Args:
+            doc_id: Dokümanın benzersiz kimliği
+            session_id: Kullanıcı oturum kimliği (izolasyon)
+
+        Returns:
+            list[dict]: [{"chunk_id": str, "text": str, "metadata": dict}, ...]
+            Sonuç boş olabilir — çağıran taraf kontrol etmeli.
+        """
+        results = self.client.scroll(
+            collection_name=self.PARENT_COLLECTION,
+            scroll_filter=Filter(
+                must=[
+                    FieldCondition(key="doc_id", match=MatchValue(value=doc_id)),
+                    FieldCondition(key="session_id", match=MatchValue(value=session_id)),
+                ]
+            ),
+            # 1000 parent chunk, tek bir doküman için yeterli üst sınır.
+            # Gerçek dünya dokümanları bu sayıyı nadiren aşar.
+            limit=1000,
+        )
+
+        parents = []
+        for point in results[0]:
+            parents.append(
+                {
+                    "chunk_id": point.payload.get("chunk_id"),
+                    "text": point.payload.get("text", ""),
+                    "metadata": {
+                        k: v
+                        for k, v in point.payload.items()
+                        if k not in ("text", "chunk_id")
+                    },
+                }
+            )
+        return parents
+
     def delete_document(self, doc_id: str, session_id: str):
         """
         Bir dokümanın tüm chunk'larını siler (child + parent).

@@ -13,6 +13,7 @@ from app.core.chunker import create_parent_child_chunks
 from app.core.document_processor import DocumentProcessor
 from app.core.embedder import Embedder
 from app.core.llm_client import (
+    SUMMARY_SYSTEM_PROMPT,
     SYSTEM_PROMPT,
     BaseLLMClient,
     build_rag_prompt,
@@ -347,3 +348,70 @@ class RAGPipeline:
                 }
             )
         return sources
+
+    # =======================================================================
+    # SUMMARIZATION PIPELINE (Map-Reduce)
+    # PRD Referans: Bölüm 15.2
+    # =======================================================================
+
+    async def summarize(
+        self,
+        doc_ids: list[str],
+        session_id: str,
+    ) -> tuple[str, list[dict]]:
+        """
+        Seçili dokümanların özetini çıkarır (Map-Reduce stratejisi).
+
+        Map: Her parent chunk için mini-özet üret (ayrı LLM çağrısı).
+        Reduce: Tüm mini-özetleri birleştirip nihai özet üret.
+
+        Özel durum: Tek parent chunk varsa Reduce aşaması atlanır;
+        mini-özetin kendisi nihai özet olarak döndürülür.
+
+        Args:
+            doc_ids: Özetlenecek doküman ID'leri
+            session_id: Kullanıcı oturum kimliği
+
+        Returns:
+            (özet_metni, kaynak_listesi)
+            kaynak_listesi: [{"filename": str, "page_number": int|None, "doc_id": str}, ...]
+        """
+        # Tüm dokümanlar için parent chunk'ları topla.
+        # VectorStore encapsulation'ına uygun — client'a doğrudan erişmiyoruz.
+        all_parents: list[dict] = []
+        for doc_id in doc_ids:
+            parents = self.vector_store.get_parents_by_doc_id(doc_id, session_id)
+            all_parents.extend(parents)
+
+        if not all_parents:
+            return "Özetlenecek içerik bulunamadı.", []
+
+        # MAP: Her parent chunk için ayrı mini-özet.
+        # LLM çağrıları sıralı yapılıyor; paralel yapılsa hızlanır ama
+        # Groq rate limit (6000 RPM / 280 TPS) aşılabilir.
+        map_template = "Aşağıdaki metin parçasının kısa bir özetini çıkar:\n\n{text}"
+        mini_summaries: list[str] = []
+        for parent in all_parents:
+            prompt = map_template.format(text=parent["text"])
+            mini = await self.llm_client.generate(prompt, SUMMARY_SYSTEM_PROMPT)
+            mini_summaries.append(mini)
+
+        # Tek chunk varsa Reduce gereksiz — mini-özet zaten nihai özet.
+        if len(mini_summaries) == 1:
+            sources = self._extract_sources(all_parents)
+            return mini_summaries[0], sources
+
+        # REDUCE: Mini-özetleri birleştir, tutarlı bir nihai özet üret.
+        combined = "\n\n---\n\n".join(mini_summaries)
+        reduce_prompt = (
+            "Aşağıda bir dokümanın farklı bölümlerinin özetleri verilmiştir.\n"
+            "Bu özetleri birleştirerek kapsamlı, tutarlı ve akıcı bir nihai özet oluştur.\n\n"
+            f"{combined}\n\nNİHAİ ÖZET:"
+        )
+        final_summary = await self.llm_client.generate(
+            reduce_prompt, SUMMARY_SYSTEM_PROMPT
+        )
+
+        # İlk 5 kaynak frontend'e yeterli; tüm liste çok gürültülü olur.
+        sources = self._extract_sources(all_parents[:5])
+        return final_summary, sources
