@@ -34,6 +34,7 @@ backend/uploads/
 *.safetensors
 *.onnx
 models/
+!backend/app/models/
 
 # ===== Docker =====
 docker-compose.override.yml
