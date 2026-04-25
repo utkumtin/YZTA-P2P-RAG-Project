@@ -1,6 +1,6 @@
-from pydantic_settings import BaseSettings
 from functools import lru_cache
-from typing import List
+
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -44,9 +44,14 @@ class Settings(BaseSettings):
     SEMANTIC_CACHE_TTL: int = 3600
     SEMANTIC_CACHE_MAX_SIZE: int = 1000
 
+    # Langfuse
+    LANGFUSE_PUBLIC_KEY: str = ""
+    LANGFUSE_SECRET_KEY: str = ""
+    LANGFUSE_HOST: str = "http://langfuse:3001"
+
     # Sistem
     MAX_FILE_SIZE_MB: int = 50
-    ALLOWED_EXTENSIONS: List[str] = ["pdf", "docx", "doc", "txt"]
+    ALLOWED_EXTENSIONS: list[str] = ["pdf", "docx", "doc", "txt"]
     UPLOAD_DIR: str = "/app/uploads"
     HF_HOME: str = "/app/models"
 
@@ -55,6 +60,6 @@ class Settings(BaseSettings):
         case_sensitive = True
 
 
-@lru_cache()
+@lru_cache
 def get_settings() -> Settings:
     return Settings()

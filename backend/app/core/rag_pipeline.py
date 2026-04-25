@@ -9,6 +9,9 @@ Tüm bileşenleri birleştirir: arama, reranking, ebeveyn çözümleme, LLM.
 
 from collections.abc import AsyncGenerator
 
+from langfuse import Langfuse
+
+from app.config import get_settings
 from app.core.chunker import create_parent_child_chunks
 from app.core.document_processor import DocumentProcessor
 from app.core.embedder import Embedder
@@ -72,6 +75,15 @@ class RAGPipeline:
         self.processor = DocumentProcessor()
         self.search_top_k = search_top_k
         self.final_top_k = final_top_k
+
+        settings = get_settings()
+        self.langfuse = None
+        if settings.LANGFUSE_PUBLIC_KEY and settings.LANGFUSE_SECRET_KEY:
+            self.langfuse = Langfuse(
+                public_key=settings.LANGFUSE_PUBLIC_KEY,
+                secret_key=settings.LANGFUSE_SECRET_KEY,
+                host=settings.LANGFUSE_HOST
+            )
 
     # =======================================================================
     # INGESTION PIPELINE
@@ -195,24 +207,47 @@ class RAGPipeline:
             ]
         """
         # 1. Cache kontrolü
+        trace = None
+        if self.langfuse:
+            trace = self.langfuse.trace(
+                name="rag-query",
+                session_id=session_id,
+                input={"question": question, "doc_ids": doc_ids}
+            )
+
         if self.cache:
             cached = await self.cache.get(question)
             if cached:
+                if trace:
+                    trace.update(tags=["cache-hit"])
+                    trace.end(output=cached["answer"])
                 return cached["answer"], cached["sources"]
 
         # 2-5. Retrieval + Reranking + Parent resolution
-        context_chunks = await self._retrieve_and_resolve(question, session_id, doc_ids)
+        context_chunks = await self._retrieve_and_resolve(question, session_id, doc_ids, trace)
 
         # Hiç alakalı chunk bulunamadıysa
         if not context_chunks:
-            return (
-                "Yüklediğiniz dokümanlarda bu sorunun cevabını bulamadım.",
-                [],
-            )
+            ans = "Yüklediğiniz dokümanlarda bu sorunun cevabını bulamadım."
+            if trace:
+                trace.end(output=ans)
+            return (ans, [])
 
         # 6. LLM cevap üretimi
         prompt = build_rag_prompt(question, context_chunks)
+
+        generation = None
+        if trace:
+            generation = trace.generation(
+                name="llm-generation",
+                model=getattr(self.llm_client, "model_name", "unknown"),
+                prompt=prompt,
+            )
+
         answer = await self.llm_client.generate(prompt, SYSTEM_PROMPT)
+
+        if generation:
+            generation.end(output=answer)
 
         # Kaynak bilgisini çıkar
         sources = self._extract_sources(context_chunks)
@@ -220,6 +255,9 @@ class RAGPipeline:
         # 7. Cache'e kaydet
         if self.cache:
             await self.cache.set(question, {"answer": answer, "sources": sources})
+
+        if trace:
+            trace.end(output=answer)
 
         return answer, sources
 
@@ -245,27 +283,52 @@ class RAGPipeline:
         kaynak bilgisi yield edilebilir.
         """
         # Cache kontrolü
+        trace = None
+        if self.langfuse:
+            trace = self.langfuse.trace(
+                name="rag-query-stream",
+                session_id=session_id,
+                input={"question": question, "doc_ids": doc_ids}
+            )
+
         if self.cache:
             cached = await self.cache.get(question)
             if cached:
                 # Cache hit — hazır cevabı tek parça yield et
+                if trace:
+                    trace.update(tags=["cache-hit"])
+                    trace.end(output=cached["answer"])
                 yield cached["answer"]
                 return
 
         # Retrieval + parent resolution
-        context_chunks = await self._retrieve_and_resolve(question, session_id, doc_ids)
+        context_chunks = await self._retrieve_and_resolve(question, session_id, doc_ids, trace)
 
         if not context_chunks:
-            yield "Yüklediğiniz dokümanlarda bu sorunun cevabını bulamadım."
+            ans = "Yüklediğiniz dokümanlarda bu sorunun cevabını bulamadım."
+            if trace:
+                trace.end(output=ans)
+            yield ans
             return
 
         prompt = build_rag_prompt(question, context_chunks)
+
+        generation = None
+        if trace:
+            generation = trace.generation(
+                name="llm-generation-stream",
+                model=getattr(self.llm_client, "model_name", "unknown"),
+                prompt=prompt,
+            )
 
         # Streaming LLM cevabı
         full_answer = ""
         async for token in self.llm_client.stream(prompt, SYSTEM_PROMPT):
             full_answer += token
             yield token
+
+        if generation:
+            generation.end(output=full_answer)
 
         # Stream bittikten sonra cache'e kaydet
         sources = self._extract_sources(context_chunks)
@@ -274,6 +337,9 @@ class RAGPipeline:
                 question,
                 {"answer": full_answer, "sources": sources},
             )
+
+        if trace:
+            trace.end(output=full_answer)
 
     # =======================================================================
     # İÇ YARDIMCILAR
@@ -284,6 +350,7 @@ class RAGPipeline:
         question: str,
         session_id: str,
         doc_ids: list[str] | None = None,
+        trace = None,
     ) -> list[dict]:
         """
         Soru için en alakalı EBEVEYN chunk'ları getirir.
@@ -300,6 +367,13 @@ class RAGPipeline:
         q_embedding = self.embedder.encode_query(question)
 
         # 2. Hibrit arama
+        retrieval_span = None
+        if trace:
+            retrieval_span = trace.span(
+                name="vector-search",
+                input={"question": question, "doc_ids": doc_ids}
+            )
+
         child_results = self.vector_store.hybrid_search(
             query_dense=q_embedding["dense"],
             query_sparse=q_embedding["sparse"],
@@ -308,15 +382,28 @@ class RAGPipeline:
             top_k=self.search_top_k,
         )
 
+        if retrieval_span:
+            retrieval_span.end(output={"retrieved_count": len(child_results)})
+
         if not child_results:
             return []
 
         # 3. Reranking
+        rerank_span = None
+        if trace:
+            rerank_span = trace.span(
+                name="reranking",
+                input={"documents_count": len(child_results)}
+            )
+
         reranked = self.reranker.rerank(
             query=question,
             documents=child_results,
             top_k=self.final_top_k,
         )
+
+        if rerank_span:
+            rerank_span.end(output={"reranked_count": len(reranked)})
 
         # 4-5. Ebeveyn çözümleme + tekrarları kaldır
         parent_ids_seen = set()
