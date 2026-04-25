@@ -7,6 +7,7 @@ python-multipart==0.0.20
 arq==0.28.0
 chardet==7.4.3
 FlagEmbedding==1.4.0
+google-genai>=1.0.0
 google-generativeai==0.8.6
 groq==1.2.0
 langdetect==1.0.9

@@ -232,7 +232,7 @@ class RAGPipeline:
         question: str,
         session_id: str,
         doc_ids: list[str] | None = None,
-    ) -> AsyncGenerator[str, None]:
+    ) -> AsyncGenerator[str]:
         """
         Streaming soru-cevap pipeline'ı.
 
@@ -351,7 +351,6 @@ class RAGPipeline:
 
     # =======================================================================
     # SUMMARIZATION PIPELINE (Map-Reduce)
-    # PRD Referans: Bölüm 15.2
     # =======================================================================
 
     async def summarize(
@@ -408,9 +407,7 @@ class RAGPipeline:
             "Bu özetleri birleştirerek kapsamlı, tutarlı ve akıcı bir nihai özet oluştur.\n\n"
             f"{combined}\n\nNİHAİ ÖZET:"
         )
-        final_summary = await self.llm_client.generate(
-            reduce_prompt, SUMMARY_SYSTEM_PROMPT
-        )
+        final_summary = await self.llm_client.generate(reduce_prompt, SUMMARY_SYSTEM_PROMPT)
 
         # İlk 5 kaynak frontend'e yeterli; tüm liste çok gürültülü olur.
         sources = self._extract_sources(all_parents[:5])

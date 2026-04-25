@@ -158,8 +158,6 @@ class TestParentChildRelationship:
 
 
 class TestTokenSizeLimits:
-    """Chunk boyutları PRD'de belirtilen sınırlar içinde olmalı."""
-
     def test_child_chunks_within_size_limit(self, long_text, sample_metadata):
         """
         Child chunk'lar 200 token sınırını aşmamalı.

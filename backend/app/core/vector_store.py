@@ -5,8 +5,6 @@ Koleksiyon oluşturma, indeksleme, hibrit arama, silme.
 Mimari:
 - documents koleksiyonu: Child chunk'lar (Dense + Sparse vektörlerle)
 - parents koleksiyonu: Parent chunk'lar (vektörsüz, sadece metin deposu)
-
-PRD Referans: Bölüm 9 — Vektör Veritabanı
 """
 
 import uuid
@@ -27,7 +25,6 @@ from qdrant_client.models import (
     SparseVectorParams,
     VectorParams,
 )
-
 
 # =========================================================================
 # DETERMINISTIC ID DÖNÜŞÜMÜ
@@ -77,9 +74,9 @@ class VectorStore:
         results = store.hybrid_search(...)  # Hibrit arama yap
     """
 
-    CHILD_COLLECTION = "documents"   # Child chunk koleksiyonu
-    PARENT_COLLECTION = "parents"    # Parent chunk koleksiyonu
-    DENSE_VECTOR_SIZE = 1024         # BGE-M3 çıktı boyutu
+    CHILD_COLLECTION = "documents"  # Child chunk koleksiyonu
+    PARENT_COLLECTION = "parents"  # Parent chunk koleksiyonu
+    DENSE_VECTOR_SIZE = 1024  # BGE-M3 çıktı boyutu
 
     def __init__(self, host: str = "qdrant", port: int = 6333):
         """
@@ -103,12 +100,10 @@ class VectorStore:
             vectors_config={
                 "dense": VectorParams(
                     size=self.DENSE_VECTOR_SIZE,
-                    distance=Distance.COSINE  # Cosine benzerliği kullanıyoruz
+                    distance=Distance.COSINE,  # Cosine benzerliği kullanıyoruz
                 )
             },
-            sparse_vectors_config={
-                "sparse": SparseVectorParams()
-            }
+            sparse_vectors_config={"sparse": SparseVectorParams()},
         )
 
         # Payload indeksleri oluştur — arama sırasında filtrelemeyi hızlandırır
@@ -116,39 +111,36 @@ class VectorStore:
             self.client.create_payload_index(
                 collection_name=self.CHILD_COLLECTION,
                 field_name="doc_id",
-                field_schema=PayloadSchemaType.KEYWORD
+                field_schema=PayloadSchemaType.KEYWORD,
             )
             self.client.create_payload_index(
                 collection_name=self.CHILD_COLLECTION,
                 field_name="session_id",
-                field_schema=PayloadSchemaType.KEYWORD
+                field_schema=PayloadSchemaType.KEYWORD,
             )
         except Exception:
             pass  # İndeks zaten varsa hata vermesini engelle
 
         # ---- Parent chunk koleksiyonu ----
         # Vektör YOK — sadece metin deposu
-        self._create_collection_if_not_exists(
-            self.PARENT_COLLECTION,
-            vectors_config={}
-        )
+        self._create_collection_if_not_exists(self.PARENT_COLLECTION, vectors_config={})
 
         # Parent koleksiyonunda chunk_id, doc_id ve session_id ile filtreleme lazım
         try:
             self.client.create_payload_index(
                 collection_name=self.PARENT_COLLECTION,
                 field_name="chunk_id",
-                field_schema=PayloadSchemaType.KEYWORD
+                field_schema=PayloadSchemaType.KEYWORD,
             )
             self.client.create_payload_index(
                 collection_name=self.PARENT_COLLECTION,
                 field_name="doc_id",
-                field_schema=PayloadSchemaType.KEYWORD
+                field_schema=PayloadSchemaType.KEYWORD,
             )
             self.client.create_payload_index(
                 collection_name=self.PARENT_COLLECTION,
                 field_name="session_id",
-                field_schema=PayloadSchemaType.KEYWORD
+                field_schema=PayloadSchemaType.KEYWORD,
             )
         except Exception:
             pass
@@ -167,7 +159,7 @@ class VectorStore:
         self,
         child_chunks: list[dict],
         dense_embeddings: list[list[float]],
-        sparse_embeddings: list[dict]
+        sparse_embeddings: list[dict],
     ):
         """
         Child chunk'ları Qdrant'a ekler.
@@ -192,27 +184,17 @@ class VectorStore:
                 id=_to_qdrant_id(chunk["id"]),
                 vector={
                     "dense": dense_embeddings[i],
-                    "sparse": SparseVector(
-                        indices=sparse_indices,
-                        values=sparse_values
-                    )
+                    "sparse": SparseVector(indices=sparse_indices, values=sparse_values),
                 },
-                payload={
-                    "chunk_id": chunk["id"],
-                    "text": chunk["text"],
-                    **chunk["metadata"]
-                }
+                payload={"chunk_id": chunk["id"], "text": chunk["text"], **chunk["metadata"]},
             )
             points.append(point)
 
         # 100'erli batch'ler halinde ekle
         batch_size = 100
         for i in range(0, len(points), batch_size):
-            batch = points[i:i + batch_size]
-            self.client.upsert(
-                collection_name=self.CHILD_COLLECTION,
-                points=batch
-            )
+            batch = points[i : i + batch_size]
+            self.client.upsert(collection_name=self.CHILD_COLLECTION, points=batch)
 
     def store_parent_chunks(self, parent_chunks: list[dict]):
         """
@@ -225,25 +207,17 @@ class VectorStore:
             point = PointStruct(
                 id=_to_qdrant_id(chunk["id"]),
                 vector={},  # Vektör yok
-                payload={
-                    "chunk_id": chunk["id"],
-                    "text": chunk["text"],
-                    **chunk["metadata"]
-                }
+                payload={"chunk_id": chunk["id"], "text": chunk["text"], **chunk["metadata"]},
             )
             points.append(point)
 
         batch_size = 100
         for i in range(0, len(points), batch_size):
-            batch = points[i:i + batch_size]
-            self.client.upsert(
-                collection_name=self.PARENT_COLLECTION,
-                points=batch
-            )
+            batch = points[i : i + batch_size]
+            self.client.upsert(collection_name=self.PARENT_COLLECTION, points=batch)
 
     # =======================================================================
     # HİBRİT ARAMA (Query Pipeline'ın retrieval adımı)
-    # PRD Referans: Bölüm 9.5
     # =======================================================================
 
     def hybrid_search(
@@ -252,7 +226,7 @@ class VectorStore:
         query_sparse: dict,
         session_id: str,
         doc_ids: list[str] = None,
-        top_k: int = 20
+        top_k: int = 20,
     ) -> list[dict]:
         """
         Hibrit arama: Dense + Sparse sonuçları RRF ile birleştirilir.
@@ -276,15 +250,11 @@ class VectorStore:
             list[dict]: [{"chunk_id": str, "text": str, "score": float, "metadata": dict}]
         """
         # Filtre oluştur — session_id ile kullanıcı izolasyonu
-        must_conditions = [
-            FieldCondition(key="session_id", match=MatchValue(value=session_id))
-        ]
+        must_conditions = [FieldCondition(key="session_id", match=MatchValue(value=session_id))]
 
         # Belirli doküman filtreleme (opsiyonel)
         if doc_ids:
-            must_conditions.append(
-                FieldCondition(key="doc_id", match=MatchAny(any=doc_ids))
-            )
+            must_conditions.append(FieldCondition(key="doc_id", match=MatchAny(any=doc_ids)))
 
         filter_condition = Filter(must=must_conditions)
 
@@ -297,25 +267,17 @@ class VectorStore:
             collection_name=self.CHILD_COLLECTION,
             prefetch=[
                 # Dense arama kolu — anlamsal benzerlik
-                Prefetch(
-                    query=query_dense,
-                    using="dense",
-                    limit=top_k,
-                    filter=filter_condition
-                ),
+                Prefetch(query=query_dense, using="dense", limit=top_k, filter=filter_condition),
                 # Sparse arama kolu — kelime bazlı eşleşme
                 Prefetch(
-                    query=SparseVector(
-                        indices=sparse_indices,
-                        values=sparse_values
-                    ),
+                    query=SparseVector(indices=sparse_indices, values=sparse_values),
                     using="sparse",
                     limit=top_k,
-                    filter=filter_condition
+                    filter=filter_condition,
                 ),
             ],
             query=FusionQuery(fusion=Fusion.RRF),
-            limit=top_k
+            limit=top_k,
         )
 
         return [
@@ -323,10 +285,7 @@ class VectorStore:
                 "chunk_id": hit.payload.get("chunk_id"),
                 "text": hit.payload.get("text"),
                 "score": hit.score,
-                "metadata": {
-                    k: v for k, v in hit.payload.items()
-                    if k not in ("text", "chunk_id")
-                }
+                "metadata": {k: v for k, v in hit.payload.items() if k not in ("text", "chunk_id")},
             }
             for hit in results.points
         ]
@@ -339,14 +298,9 @@ class VectorStore:
         results = self.client.scroll(
             collection_name=self.PARENT_COLLECTION,
             scroll_filter=Filter(
-                must=[
-                    FieldCondition(
-                        key="chunk_id",
-                        match=MatchValue(value=parent_chunk_id)
-                    )
-                ]
+                must=[FieldCondition(key="chunk_id", match=MatchValue(value=parent_chunk_id))]
             ),
-            limit=1
+            limit=1,
         )
 
         points = results[0]
@@ -355,10 +309,7 @@ class VectorStore:
             return {
                 "chunk_id": p.payload.get("chunk_id"),
                 "text": p.payload.get("text"),
-                "metadata": {
-                    k: v for k, v in p.payload.items()
-                    if k not in ("text", "chunk_id")
-                }
+                "metadata": {k: v for k, v in p.payload.items() if k not in ("text", "chunk_id")},
             }
         return None
 
@@ -397,9 +348,7 @@ class VectorStore:
                     "chunk_id": point.payload.get("chunk_id"),
                     "text": point.payload.get("text", ""),
                     "metadata": {
-                        k: v
-                        for k, v in point.payload.items()
-                        if k not in ("text", "chunk_id")
+                        k: v for k, v in point.payload.items() if k not in ("text", "chunk_id")
                     },
                 }
             )
@@ -413,15 +362,9 @@ class VectorStore:
         filter_condition = Filter(
             must=[
                 FieldCondition(key="doc_id", match=MatchValue(value=doc_id)),
-                FieldCondition(key="session_id", match=MatchValue(value=session_id))
+                FieldCondition(key="session_id", match=MatchValue(value=session_id)),
             ]
         )
 
-        self.client.delete(
-            collection_name=self.CHILD_COLLECTION,
-            points_selector=filter_condition
-        )
-        self.client.delete(
-            collection_name=self.PARENT_COLLECTION,
-            points_selector=filter_condition
-        )
+        self.client.delete(collection_name=self.CHILD_COLLECTION, points_selector=filter_condition)
+        self.client.delete(collection_name=self.PARENT_COLLECTION, points_selector=filter_condition)
