@@ -18,7 +18,7 @@ services:
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
       qdrant:
-        condition: service_healthy
+        condition: service_started
       redis:
         condition: service_healthy
 
@@ -37,7 +37,7 @@ services:
       backend:
         condition: service_started
       qdrant:
-        condition: service_healthy
+        condition: service_started
       redis:
         condition: service_healthy
 
