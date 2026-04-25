@@ -231,7 +231,7 @@ class RAGPipeline:
         question: str,
         session_id: str,
         doc_ids: list[str] | None = None,
-    ) -> AsyncGenerator[str]:
+    ) -> AsyncGenerator[str, None]:
         """
         Streaming soru-cevap pipeline'ı.
 
