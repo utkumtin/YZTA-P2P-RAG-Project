@@ -3,14 +3,36 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    image: yzta-backend:latest
     ports:
       - "8000:8000"
     env_file:
       - ./backend/.env
+    environment:
+      HF_HOME: /app/models
     volumes:
       - uploads_data:/app/uploads
       - models_data:/app/models
     depends_on:
+      qdrant:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker:
+    image: yzta-backend:latest
+    command: arq app.workers.ingestion_worker.WorkerSettings
+    env_file:
+      - ./backend/.env
+    environment:
+      HF_HOME: /app/models
+    volumes:
+      - uploads_data:/app/uploads
+      - models_data:/app/models
+    depends_on:
+      backend:
+        condition: service_started
       qdrant:
         condition: service_healthy
       redis:
