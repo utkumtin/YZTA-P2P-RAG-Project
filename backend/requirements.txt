@@ -1,38 +1,9 @@
-# Web Framework
-fastapi==0.115.5
-uvicorn[standard]==0.32.1
-
-# Data Validation & Settings
-pydantic==2.10.3
-pydantic-settings==2.6.1
-
-# Vector Database
-qdrant-client==1.12.1
-
-# Cache
-redis==5.2.1
-
-# LLM Providers
-groq==0.13.0
-google-generativeai==0.8.3
-
-# Embeddings & Reranking
-torch==2.6.0
-transformers==4.47.1
-sentence-transformers==3.3.1
-
-# Document Parsing
-pypdf==5.1.0
-python-docx==1.1.2
-
-# File Uploads
-python-multipart==0.0.12
-
-# Async HTTP
-httpx==0.28.1
-
-# Utilities
-python-dotenv==1.0.1
+fastapi==0.115.12
+uvicorn[standard]==0.34.0
+pydantic==2.11.3
+pydantic-settings==2.9.1
+aiofiles==24.1.0
+python-multipart==0.0.20
 arq==0.28.0
 chardet==7.4.3
 FlagEmbedding==1.4.0

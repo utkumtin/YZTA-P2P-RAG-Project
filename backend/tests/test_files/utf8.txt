@@ -1,0 +1,3 @@
+Bu bir test dosyasıdır. Türkçe karakterler: ş, ç, ğ, ü, ö, ı, İ, Ğ, Ş.
+Bu metin RAG sisteminin doküman işleme modülünü test etmek için kullanılmaktadır.
+Sözleşme koşulları aşağıda belirtilmiştir. Taraflar arasında mutabakat sağlanmıştır.
