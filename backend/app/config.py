@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     MAX_FILE_SIZE_MB: int = 50
     ALLOWED_EXTENSIONS: List[str] = ["pdf", "docx", "doc", "txt"]
     UPLOAD_DIR: str = "/app/uploads"
-
+    HF_HOME: str = "/app/models"
 
     class Config:
         env_file = ".env"

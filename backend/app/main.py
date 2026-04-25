@@ -4,14 +4,16 @@ from contextlib import asynccontextmanager
 import os
 
 from app.config import get_settings
-from app.api.routes import  documents, chat, summarize ,health , upload
+from app.api.routes import documents, chat, summarize, health, upload
 
 settings = get_settings()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    os.environ.setdefault("HF_HOME", settings.HF_HOME)
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+    os.makedirs(settings.HF_HOME, exist_ok=True)
     yield
 
 
