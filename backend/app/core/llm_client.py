@@ -41,16 +41,16 @@ KURALLAR:
 
 def build_rag_prompt(question: str, context_chunks: list[dict]) -> str:
     """
-    Kullanıcı sorusu ve EBEVEYN chunk'ları birleştirerek
+    Kullanıcı sorusu ve parent chunk'ları birleştirerek
     LLM'e gönderilecek prompt'u oluşturur.
 
-    ÖNEMLİ: LLM'e EBEVEYN chunk'lar gönderilir, ÇOCUK değil.
-    Çocuk aramada bulundu (yüksek precision), ama LLM'e
-    geniş bağlamı olan ebeveyn verilir (zengin context).
+    ÖNEMLİ: LLM'e parent chunk'lar gönderilir, child değil.
+    child aramada bulundu (yüksek precision), ama LLM'e
+    geniş bağlamı olan parent verilir (zengin context).
 
     Args:
         question: Kullanıcının sorusu
-        context_chunks: vector_store.get_parent_by_id() ile gelen ebeveyn chunk listesi
+        context_chunks: vector_store.get_parent_by_id() ile gelen parent chunk listesi
 
     Returns:
         LLM'e gönderilecek formatlı prompt

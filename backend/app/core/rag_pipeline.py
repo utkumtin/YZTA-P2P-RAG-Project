@@ -1,6 +1,6 @@
 """
 RAG Pipeline Orkestratörü.
-Tüm bileşenleri birleştirir: arama, reranking, ebeveyn çözümleme, LLM.
+Tüm bileşenleri birleştirir: arama, reranking, parent çözümleme, LLM.
 
 İki ana akış:
 1. Ingestion: Dosya yükle → metin çıkar → temizle → parçala → embed → indeksle
@@ -82,7 +82,7 @@ class RAGPipeline:
             self.langfuse = Langfuse(
                 public_key=settings.LANGFUSE_PUBLIC_KEY,
                 secret_key=settings.LANGFUSE_SECRET_KEY,
-                host=settings.LANGFUSE_HOST
+                host=settings.LANGFUSE_HOST,
             )
 
     # =======================================================================
@@ -103,9 +103,9 @@ class RAGPipeline:
         Adımlar:
         1. Metin çıkarma (format'a göre)
         2. Metadata hazırlama
-        3. Ebeveyn-Çocuk chunking
-        4. Embedding üretimi (SADECE çocuk chunk'lar)
-        5. Qdrant'a indeksleme (çocuk + ebeveyn ayrı koleksiyonlara)
+        3. parent-child chunking
+        4. Embedding üretimi (SADECE child chunk'lar)
+        5. Qdrant'a indeksleme (child + parent ayrı koleksiyonlara)
 
         Args:
             file_path: Diskteki dosya yolu
@@ -141,8 +141,8 @@ class RAGPipeline:
             metadata,
         )
 
-        # 4. Embedding üretimi (SADECE çocuk chunk'lar)
-        # Ebeveynler vektörsüz saklanır (arama çocukta yapılıyor)
+        # 4. Embedding üretimi (SADECE child chunk'lar)
+        # parentler vektörsüz saklanır (arama childta yapılıyor)
         if progress_callback:
             await progress_callback("Embedding üretiliyor...", 0.5)
 
@@ -153,7 +153,7 @@ class RAGPipeline:
         if progress_callback:
             await progress_callback("İndeksleniyor...", 0.8)
 
-        # Ebeveynler önce — çocuklar aranırken ebeveyn çözümleme çalışsın diye
+        # parentler önce — childlar aranırken parent çözümleme çalışsın diye
         self.vector_store.store_parent_chunks(parents)
         self.vector_store.index_child_chunks(
             children,
@@ -189,9 +189,9 @@ class RAGPipeline:
         Akış:
         1. Semantik cache kontrolü
         2. Soru embedding
-        3. Hibrit arama → Top-20 çocuk chunk
-        4. Reranking → Top-5 çocuk chunk
-        5. Ebeveyn çözümleme → 5 ebeveyn chunk
+        3. Hibrit arama → Top-20 child chunk
+        4. Reranking → Top-5 child chunk
+        5. parent çözümleme → 5 parent chunk
         6. LLM cevap üretimi
         7. Cache'e kaydet
 
@@ -212,7 +212,7 @@ class RAGPipeline:
             trace = self.langfuse.trace(
                 name="rag-query",
                 session_id=session_id,
-                input={"question": question, "doc_ids": doc_ids}
+                input={"question": question, "doc_ids": doc_ids},
             )
 
         if self.cache:
@@ -288,7 +288,7 @@ class RAGPipeline:
             trace = self.langfuse.trace(
                 name="rag-query-stream",
                 session_id=session_id,
-                input={"question": question, "doc_ids": doc_ids}
+                input={"question": question, "doc_ids": doc_ids},
             )
 
         if self.cache:
@@ -350,18 +350,18 @@ class RAGPipeline:
         question: str,
         session_id: str,
         doc_ids: list[str] | None = None,
-        trace = None,
+        trace=None,
     ) -> list[dict]:
         """
-        Soru için en alakalı EBEVEYN chunk'ları getirir.
+        Soru için en alakalı parent chunk'ları getirir.
 
         Adımlar:
         1. Soruyu embed et
-        2. Hibrit arama → çocuk chunk'lar
-        3. Reranking → en iyi çocuk chunk'lar
-        4. Her çocuğun ebeveynini getir
-        5. Tekrar eden ebeveynleri kaldır
-           (aynı ebeveynin birden fazla çocuğu bulunmuş olabilir)
+        2. Hibrit arama → child chunk'lar
+        3. Reranking → en iyi child chunk'lar
+        4. Her çocuğun parentini getir
+        5. Tekrar eden parentleri kaldır
+           (aynı parentin birden fazla çocuğu bulunmuş olabilir)
         """
         # 1. Soru embedding
         q_embedding = self.embedder.encode_query(question)
@@ -370,8 +370,7 @@ class RAGPipeline:
         retrieval_span = None
         if trace:
             retrieval_span = trace.span(
-                name="vector-search",
-                input={"question": question, "doc_ids": doc_ids}
+                name="vector-search", input={"question": question, "doc_ids": doc_ids}
             )
 
         child_results = self.vector_store.hybrid_search(
@@ -392,8 +391,7 @@ class RAGPipeline:
         rerank_span = None
         if trace:
             rerank_span = trace.span(
-                name="reranking",
-                input={"documents_count": len(child_results)}
+                name="reranking", input={"documents_count": len(child_results)}
             )
 
         reranked = self.reranker.rerank(
@@ -405,7 +403,7 @@ class RAGPipeline:
         if rerank_span:
             rerank_span.end(output={"reranked_count": len(reranked)})
 
-        # 4-5. Ebeveyn çözümleme + tekrarları kaldır
+        # 4-5. parent çözümleme + tekrarları kaldır
         parent_ids_seen = set()
         parent_chunks = []
 
