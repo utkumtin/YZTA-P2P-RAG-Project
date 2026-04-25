@@ -1,10 +1,11 @@
 name: p2p-rag-project
 services:
   backend:
+    container_name: p2p-rag-project
     build:
       context: ./backend
       dockerfile: Dockerfile
-    image: yzta-backend:latest
+    image: p2p-rag-project-backend:latest
     ports:
       - "8000:8000"
     env_file:
@@ -22,7 +23,7 @@ services:
     restart: unless-stopped
 
   worker:
-    image: yzta-backend:latest
+    image: p2p-rag-project-backend:latest
     command: arq app.workers.ingestion_worker.WorkerSettings
     env_file:
       - ./backend/.env
