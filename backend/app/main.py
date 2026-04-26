@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+from arq import create_pool
+from arq.connections import RedisSettings
 import os
 
 from app.config import get_settings
@@ -14,6 +16,15 @@ async def lifespan(app: FastAPI):
     os.environ.setdefault("HF_HOME", settings.HF_HOME)
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     os.makedirs(settings.HF_HOME, exist_ok=True)
+
+    app.state.redis_pool = await create_pool(
+        RedisSettings(
+            host=settings.REDIS_HOST,
+            port=settings.REDIS_PORT,
+            database=settings.REDIS_DB,
+        )
+    )
+    print("ARQ Worker Redis havuzu başarıyla oluşturuldu.")
 
     app.state.semantic_cache = None
     if settings.SEMANTIC_CACHE_ENABLED:
@@ -36,10 +47,17 @@ async def lifespan(app: FastAPI):
             await sc.load_from_redis()
             app.state.semantic_cache = sc
             app.state.redis_client = redis_client
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Semantic Cache başlatılamadı: {e}")
 
     yield
+
+    if hasattr(app.state, "redis_pool") and app.state.redis_pool is not None:
+        try:
+            await app.state.redis_pool.close()
+            print("ARQ Worker Redis havuzu kapatıldı.")
+        except Exception:
+            pass
 
     if hasattr(app.state, "redis_client") and app.state.redis_client is not None:
         try:
