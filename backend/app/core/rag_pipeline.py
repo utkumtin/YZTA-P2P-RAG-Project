@@ -441,14 +441,21 @@ class RAGPipeline:
         Chunk listesinden kaynak bilgisi çıkarır.
         Frontend'e gönderilecek format.
         """
+        seen: set[tuple] = set()
         sources = []
         for chunk in chunks:
             meta = chunk.get("metadata", {})
+            doc_id = meta.get("doc_id", "")
+            page_number = meta.get("page_number")
+            key = (doc_id, page_number)
+            if key in seen:
+                continue
+            seen.add(key)
             sources.append(
                 {
                     "filename": meta.get("filename", "Bilinmeyen"),
-                    "page_number": meta.get("page_number"),
-                    "doc_id": meta.get("doc_id", ""),
+                    "page_number": page_number,
+                    "doc_id": doc_id,
                 }
             )
         return sources
