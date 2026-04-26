@@ -13,6 +13,14 @@ settings = get_settings()
 
 ALLOWED = set(settings.ALLOWED_EXTENSIONS)
 
+# Magic bytes for each supported extension; None = skip magic check (plain text)
+_MAGIC: dict[str, tuple[bytes, ...] | None] = {
+    "pdf": (b"\x25\x50\x44\x46",),
+    "docx": (b"\x50\x4B\x03\x04",),
+    "doc": (b"\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1",),
+    "txt": None,
+}
+
 
 def sanitize_filename(raw_name: str | None) -> str:
     if not raw_name or not str(raw_name).strip():
@@ -46,13 +54,34 @@ def sanitize_filename(raw_name: str | None) -> str:
     return stem + ext
 
 
-def validate_file(filename: str):
+def validate_extension(filename: str) -> str:
     ext = filename.rsplit(".")[-1].lower() if "." in filename else ""
     if ext not in ALLOWED:
         raise HTTPException(
             status_code=400, detail=f"Desteklenmeyen format: .{ext}. İzin verilenler: {ALLOWED}"
         )
     return ext
+
+
+def validate_file_content(ext: str, contents: bytes) -> None:
+    max_bytes = settings.MAX_FILE_SIZE_MB * 1024 * 1024
+    if len(contents) > max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Dosya boyutu {settings.MAX_FILE_SIZE_MB} MB sınırını aşıyor.",
+        )
+
+    if len(contents) == 0:
+        raise HTTPException(status_code=400, detail="Dosya boş.")
+
+    magic_signatures = _MAGIC.get(ext)
+    if magic_signatures is not None:
+        header = contents[:8]
+        if not any(header.startswith(sig) for sig in magic_signatures):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Dosya içeriği .{ext} formatıyla eşleşmiyor (geçersiz magic bytes).",
+            )
 
 
 @router.post("", response_model=list[DocumentUploadResponse])
@@ -66,19 +95,23 @@ async def upload_documents(
 
     for file in files:
         sanitized_filename = sanitize_filename(file.filename)
-        ext = validate_file(sanitized_filename)
+        ext = validate_extension(sanitized_filename)
 
         document_id = str(uuid.uuid4())
         save_path = os.path.join(settings.UPLOAD_DIR, f"{document_id}.{ext}")
 
         try:
             contents = await file.read()
+            validate_file_content(ext, contents)
+
             async with aiofiles.open(save_path, "wb") as f:
                 await f.write(contents)
 
             job = await arq_redis.enqueue_job(
                 "ingest_document", document_id, save_path, sanitized_filename
             )
+        except HTTPException:
+            raise
         except Exception as e:
             if os.path.exists(save_path):
                 os.remove(save_path)
