@@ -40,6 +40,7 @@ def create_parent_child_chunks(
     parent_chunk_overlap: int = 100,
     child_chunk_size: int = 200,
     child_chunk_overlap: int = 50,
+    pages: list[dict] | None = None,
 ) -> tuple[list[dict], list[dict]]:
     """
     Metni Parent-Child stratejisiyle parçalar.
@@ -74,6 +75,9 @@ def create_parent_child_chunks(
         parent_chunk_overlap: Parent parçalar arası örtüşme (token). Varsayılan: 100
         child_chunk_size: Child parça boyutu (token). Varsayılan: 200
         child_chunk_overlap: Child parçalar arası örtüşme (token). Varsayılan: 50
+        pages: Sayfa-başına chunking için [{"page_number": int, "text": str}, ...].
+               Verilirse her chunk kendi sayfasının page_number'ını taşır.
+               None ise full_text üzerinden standart davranış (page_number atanmaz).
 
     Returns:
         tuple: (parent_chunks, child_chunks)
@@ -104,7 +108,7 @@ def create_parent_child_chunks(
     Raises:
         ValueError: full_text boş veya None ise
     """
-    if not full_text or not full_text.strip():
+    if not pages and (not full_text or not full_text.strip()):
         raise ValueError("full_text boş olamaz. Chunking için metin gerekli.")
 
     # doc_id yoksa UUID üret (fallback — normalde backend'ci sağlamalı)
@@ -142,12 +146,55 @@ def create_parent_child_chunks(
         separator=" ",
     )
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # AŞAMA 1: Parent parçalar oluştur
-    # ─────────────────────────────────────────────────────────────────────────
-    parent_texts = parent_splitter.split_text(full_text)
     parent_chunks: list[dict] = []
     child_chunks: list[dict] = []
+
+    # pages verilmişse her sayfayı ayrı chunkla — her chunk kendi page_number'ını taşır
+    if pages:
+        chunk_counter = 0
+        for page in pages:
+            page_text = page["text"]
+            page_number = page["page_number"]
+            if not page_text.strip():
+                continue
+
+            for parent_text in parent_splitter.split_text(page_text):
+                parent_id = f"parent-{doc_id}-{chunk_counter:04d}"
+                parent_chunks.append(
+                    {
+                        "id": parent_id,
+                        "text": parent_text,
+                        "metadata": {
+                            **doc_metadata,
+                            "chunk_type": "parent",
+                            "chunk_index": chunk_counter,
+                            "page_number": page_number,
+                        },
+                    }
+                )
+
+                for j, child_text in enumerate(child_splitter.split_text(parent_text)):
+                    child_chunks.append(
+                        {
+                            "id": f"child-{doc_id}-{chunk_counter:04d}-{j:03d}",
+                            "text": child_text,
+                            "metadata": {
+                                **doc_metadata,
+                                "chunk_type": "child",
+                                "chunk_index": j,
+                                "parent_chunk_id": parent_id,
+                                "page_number": page_number,
+                            },
+                        }
+                    )
+
+                chunk_counter += 1
+        return parent_chunks, child_chunks
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # AŞAMA 1: Parent parçalar oluştur (pages verilmediğinde — backward compat)
+    # ─────────────────────────────────────────────────────────────────────────
+    parent_texts = parent_splitter.split_text(full_text)
 
     for i, parent_text in enumerate(parent_texts):
         # Parent ID: "parent-{doc_id}-{sıra_no 4 basamak}"

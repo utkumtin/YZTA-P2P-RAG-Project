@@ -438,3 +438,104 @@ class TestTokenLength:
         """Fonksiyon int döndürmeli."""
         result = _token_length("test")
         assert isinstance(result, int)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Test 8: Sayfa-başına chunking (pages kwarg)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestPageAwareChunking:
+    """pages kwarg ile sayfa numarası metadata'ya aktarılıyor mu?"""
+
+    @pytest.fixture(autouse=True)
+    def configure_splitter_mock(self):
+        """
+        conftest.py SentenceSplitter'ı MagicMock class'ıyla stub'luyor.
+        Bu fixture patch ile gerçek davranışa yakın şekilde yapılandırır:
+        split_text metni tek chunk olarak döndürür.
+        """
+        from unittest.mock import patch, MagicMock
+
+        mock_splitter = MagicMock()
+        mock_splitter.split_text.side_effect = lambda text: [text] if text.strip() else []
+
+        with patch("app.core.chunker.SentenceSplitter", return_value=mock_splitter):
+            yield
+
+    @pytest.fixture
+    def two_page_doc(self):
+        sentence = (
+            "Bu birinci sayfanın içeriğidir. "
+            "Sözleşme koşulları burada belirtilmiştir. "
+            "Taraflar yükümlülüklerini kabul etmiştir. "
+        )
+        return [
+            {"page_number": 1, "text": sentence * 30},
+            {"page_number": 2, "text": sentence * 30},
+        ]
+
+    def test_page_number_in_parent_metadata(self, two_page_doc, sample_metadata):
+        """Her parent kendi sayfasının page_number'ını taşımalı."""
+        parents, _ = create_parent_child_chunks(
+            "", sample_metadata, pages=two_page_doc
+        )
+        for parent in parents:
+            assert "page_number" in parent["metadata"], (
+                f"Parent '{parent['id']}' metadata'sında page_number yok"
+            )
+            assert parent["metadata"]["page_number"] in (1, 2)
+
+    def test_page_number_in_child_metadata(self, two_page_doc, sample_metadata):
+        """Her child kendi sayfasının page_number'ını taşımalı."""
+        _, children = create_parent_child_chunks(
+            "", sample_metadata, pages=two_page_doc
+        )
+        for child in children:
+            assert "page_number" in child["metadata"], (
+                f"Child '{child['id']}' metadata'sında page_number yok"
+            )
+            assert child["metadata"]["page_number"] in (1, 2)
+
+    def test_page_numbers_match_source_pages(self, two_page_doc, sample_metadata):
+        """Birinci sayfadan üretilen chunk'lar page_number=1, ikincisi page_number=2 almalı."""
+        parents, children = create_parent_child_chunks(
+            "", sample_metadata, pages=two_page_doc
+        )
+        page1_parents = [p for p in parents if p["metadata"]["page_number"] == 1]
+        page2_parents = [p for p in parents if p["metadata"]["page_number"] == 2]
+        assert len(page1_parents) > 0, "Sayfa 1'den hiç parent üretilmedi"
+        assert len(page2_parents) > 0, "Sayfa 2'den hiç parent üretilmedi"
+
+        page1_children = [c for c in children if c["metadata"]["page_number"] == 1]
+        page2_children = [c for c in children if c["metadata"]["page_number"] == 2]
+        assert len(page1_children) > 0, "Sayfa 1'den hiç child üretilmedi"
+        assert len(page2_children) > 0, "Sayfa 2'den hiç child üretilmedi"
+
+    def test_chunk_ids_unique_across_pages(self, two_page_doc, sample_metadata):
+        """Tüm sayfalardaki chunk ID'leri benzersiz olmalı."""
+        parents, children = create_parent_child_chunks(
+            "", sample_metadata, pages=two_page_doc
+        )
+        all_ids = [c["id"] for c in parents + children]
+        assert len(all_ids) == len(set(all_ids)), "Sayfa sınırında yinelenen chunk ID'si!"
+
+    def test_child_parent_link_valid_across_pages(self, two_page_doc, sample_metadata):
+        """Sayfa-başına chunk'larda parent-child referansları geçerli olmalı."""
+        parents, children = create_parent_child_chunks(
+            "", sample_metadata, pages=two_page_doc
+        )
+        parent_ids = {p["id"] for p in parents}
+        for child in children:
+            pid = child["metadata"]["parent_chunk_id"]
+            assert pid in parent_ids, (
+                f"Child '{child['id']}' geçersiz parent_chunk_id taşıyor: '{pid}'"
+            )
+
+    def test_fallback_without_pages_has_no_page_number(self, long_text, sample_metadata):
+        """pages kwarg verilmediğinde chunk'larda page_number olmamalı (backward compat)."""
+        parents, children = create_parent_child_chunks(long_text, sample_metadata)
+        for chunk in parents + children:
+            assert "page_number" not in chunk["metadata"], (
+                f"pages=None iken page_number eklenmemeli: {chunk['id']}"
+            )

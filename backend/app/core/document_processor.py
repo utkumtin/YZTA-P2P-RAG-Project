@@ -109,27 +109,33 @@ class DocumentProcessor:
                     "Desteklenen formatlar: PDF, DOCX, DOC, TXT"
                 )
 
-        # Tüm sayfa metinlerini birleştir
-        # Boş sayfaları atla (OCR başarısız olmuş olabilir)
-        full_text = "\n\n".join(p["text"] for p in pages if p["text"].strip())
+        # Sayfa-başına temizle — chunker page_number eşlemesi için buna ihtiyaç duyuyor
+        cleaned_pages = []
+        for p in pages:
+            if not p["text"].strip():
+                continue
+            cleaned, _ = clean_text(p["text"])
+            if cleaned.strip():
+                cleaned_pages.append({"page_number": p["page_number"], "text": cleaned})
 
         # Dosyadan hiç metin çıkamadıysa hata ver
-        if not full_text.strip():
+        if not cleaned_pages:
             raise DocumentProcessingError(
                 f"Dosyadan metin çıkarılamadı: {filename}. "
                 "Dosya boş olabilir veya içerik okunamaz formatta olabilir."
             )
 
-        # Metin temizleme ve dil tespiti
-        # clean_text() → (temiz_metin, dil_kodu) tuple döndürür
-        cleaned_text, language = clean_text(full_text)
+        full_text = "\n\n".join(p["text"] for p in cleaned_pages)
+
+        # Dil tespiti birleşik metin üzerinden yapılır (daha güvenilir)
+        _, language = clean_text(full_text)
 
         return {
             "doc_id": doc_id,
             "filename": filename,
             "file_type": ext,
-            "pages": pages,
-            "full_text": cleaned_text,
+            "pages": cleaned_pages,
+            "full_text": full_text,
             "language": language,
         }
 

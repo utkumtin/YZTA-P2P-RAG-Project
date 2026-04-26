@@ -153,6 +153,7 @@ class RAGPipeline:
         parents, children = create_parent_child_chunks(
             result["full_text"],
             metadata,
+            pages=result["pages"],
         )
 
         # 4. Embedding üretimi (SADECE child chunk'lar)
@@ -488,7 +489,7 @@ class RAGPipeline:
             all_parents.extend(parents)
 
         if not all_parents:
-            return "", []
+            return "Seçili dokümanlar için içerik bulunamadı.", []
 
         # Tek chunk varsa Reduce gereksiz — doğrudan nihai özeti çıkar.
         if len(all_parents) == 1:

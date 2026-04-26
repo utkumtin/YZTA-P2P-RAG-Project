@@ -182,3 +182,67 @@ async def test_summarize_source_format(pipeline, vector_store, llm_client):
         "page_number": 3,
         "doc_id": "abc-123",
     }
+
+
+# ---------------------------------------------------------------------------
+# ingest_document — page_number metadata akışı
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_ingest_document_page_number_flows_to_chunks(pipeline, vector_store):
+    """
+    ingest_document; processor'dan gelen pages listesini chunker'a aktarmalı
+    ve Qdrant'a indekslenen child chunk'lar page_number taşımalı.
+    """
+    from unittest.mock import patch
+
+    sentence = (
+        "Bu bir sözleşme maddesidir. "
+        "Taraflar yükümlülüklerini kabul etmiştir. "
+        "Fesih süresi otuz gündür. "
+    )
+    page1_text = sentence * 20
+    page2_text = sentence * 20
+
+    processor_result = {
+        "filename": "sozlesme.pdf",
+        "file_type": "pdf",
+        "language": "tr",
+        "pages": [
+            {"page_number": 1, "text": page1_text},
+            {"page_number": 2, "text": page2_text},
+        ],
+        "full_text": page1_text + "\n\n" + page2_text,
+    }
+
+    pipeline.processor = MagicMock()
+    pipeline.processor.process.return_value = processor_result
+
+    captured_children: list[list[dict]] = []
+
+    def _capture_index(children, dense, sparse):
+        captured_children.append(children)
+
+    vector_store.store_parent_chunks = MagicMock()
+    vector_store.index_child_chunks = MagicMock(side_effect=_capture_index)
+
+    pipeline.embedder.encode.return_value = {
+        "dense": [[0.0] * 768] * 1000,
+        "sparse": [{"indices": [], "values": []}] * 1000,
+    }
+
+    # conftest SentenceSplitter'ı MagicMock ile stub'luyor; split_text'i çalışır hale getir
+    mock_splitter = MagicMock()
+    mock_splitter.split_text.side_effect = lambda text: [text] if text.strip() else []
+
+    with patch("app.core.chunker.SentenceSplitter", return_value=mock_splitter):
+        await pipeline.ingest_document("/fake/path.pdf", "doc-xyz", "sess-1")
+
+    assert captured_children, "index_child_chunks hiç çağrılmadı"
+    all_children = captured_children[0]
+
+    page_numbers = {c["metadata"].get("page_number") for c in all_children}
+    assert None not in page_numbers, "Bazı child chunk'larda page_number=None"
+    assert 1 in page_numbers, "Sayfa 1'den gelen child bulunamadı"
+    assert 2 in page_numbers, "Sayfa 2'den gelen child bulunamadı"
