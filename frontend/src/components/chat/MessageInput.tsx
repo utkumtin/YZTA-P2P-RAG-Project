@@ -1,52 +1,86 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useChat } from '../../hooks/useChat'
+
+const SendIco = () => (
+  <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+    <path d="M2.5 8l11-4.5L9.5 14l-2-5.5-5-.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" strokeLinecap="round"/>
+  </svg>
+)
 
 export default function MessageInput() {
   const [value, setValue] = useState('')
+  const [focused, setFocused] = useState(false)
   const { sendMessage, isStreaming } = useChat()
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const ta = useRef<HTMLTextAreaElement>(null)
 
-  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      submit()
-    }
-  }
+  useEffect(() => {
+    if (!ta.current) return
+    ta.current.style.height = 'auto'
+    ta.current.style.height = Math.min(160, ta.current.scrollHeight) + 'px'
+  }, [value])
 
   function submit() {
     const trimmed = value.trim()
     if (!trimmed || isStreaming) return
     sendMessage(trimmed)
     setValue('')
-    if (textareaRef.current) textareaRef.current.style.height = 'auto'
+    if (ta.current) ta.current.style.height = 'auto'
   }
 
-  function handleInput(e: React.ChangeEvent<HTMLTextAreaElement>) {
-    setValue(e.target.value)
-    const el = e.target
-    el.style.height = 'auto'
-    el.style.height = `${Math.min(el.scrollHeight, 160)}px`
-  }
+  const sendDisabled = isStreaming || !value.trim()
 
   return (
-    <div className="border-t border-gray-200 p-3 md:p-4 flex gap-3 bg-white items-end">
-      <textarea
-        ref={textareaRef}
-        rows={1}
-        value={value}
-        onChange={handleInput}
-        onKeyDown={handleKeyDown}
-        disabled={isStreaming}
-        placeholder="Sorunuzu yazın… (Enter = gönder, Shift+Enter = satır)"
-        className="flex-1 resize-none border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:opacity-50 leading-relaxed overflow-hidden"
-      />
-      <button
-        onClick={submit}
-        disabled={isStreaming || !value.trim()}
-        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
-      >
-        {isStreaming ? 'Yanıtlanıyor…' : 'Gönder'}
-      </button>
+    <div style={{ padding: '8px 24px 22px' }}>
+      <div style={{ maxWidth: 760, margin: '0 auto' }}>
+        <div style={{
+          position: 'relative',
+          border: focused ? '1px solid var(--accent-border-soft-strong)' : '1px solid var(--b-10)',
+          background: 'var(--panel)',
+          borderRadius: 14,
+          boxShadow: focused ? '0 0 0 4px var(--accent-softer)' : 'none',
+          transition: 'border-color .15s, box-shadow .15s',
+        }}>
+          <textarea
+            ref={ta}
+            value={value}
+            onChange={e => setValue(e.target.value)}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit() }
+            }}
+            placeholder="Belgelere bir soru sorun…"
+            rows={1}
+            disabled={isStreaming}
+            style={{
+              display: 'block', width: '100%',
+              resize: 'none', border: 0, outline: 'none',
+              background: 'transparent', color: '#fff',
+              fontFamily: 'inherit', fontSize: 15, lineHeight: 1.5,
+              letterSpacing: '-.005em',
+              padding: '14px 56px 14px 16px',
+              minHeight: 50, maxHeight: 160,
+              overflow: 'hidden',
+            }}
+          />
+          <button
+            onClick={submit}
+            disabled={sendDisabled}
+            style={{
+              position: 'absolute', right: 8, bottom: 8,
+              cursor: sendDisabled ? 'default' : 'pointer',
+              width: 34, height: 34, borderRadius: 9,
+              background: sendDisabled ? 'var(--b-06)' : 'var(--accent-fg)',
+              color: sendDisabled ? 'var(--txt-3)' : '#1a1320',
+              border: 'none',
+              display: 'grid', placeItems: 'center',
+              transition: 'background .15s',
+            }}
+          >
+            <SendIco />
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

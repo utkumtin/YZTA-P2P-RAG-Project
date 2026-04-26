@@ -1,20 +1,49 @@
+const SparkleIco = () => (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+    <path d="M8 2v4M8 10v4M2 8h4M10 8h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+    <path d="M4 4l1.5 1.5M10.5 10.5L12 12M4 12l1.5-1.5M10.5 5.5L12 4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" opacity=".6"/>
+  </svg>
+)
+
 interface HeaderProps {
-  onMenuClick: () => void
+  inspectorOpen: boolean
+  onToggleInspector: () => void
 }
 
-export default function Header({ onMenuClick }: HeaderProps) {
+export default function Header({ inspectorOpen, onToggleInspector }: HeaderProps) {
   return (
-    <header className="h-14 bg-indigo-600 flex items-center px-4 gap-3 shadow-md flex-shrink-0">
+    <header style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      padding: '0 18px', height: 52,
+      borderBottom: '1px solid var(--b-06)', background: 'var(--bg)',
+      flexShrink: 0,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{
+          width: 22, height: 22, borderRadius: 6,
+          background: 'var(--accent-soft)',
+          border: '1px solid var(--accent-border-soft)',
+          display: 'grid', placeItems: 'center', color: 'var(--accent-fg)',
+        }}>
+          <SparkleIco />
+        </div>
+        <span style={{ fontSize: 14, fontWeight: 500, letterSpacing: '-.01em', color: '#fff' }}>YZTA</span>
+      </div>
+
       <button
-        onClick={onMenuClick}
-        className="text-white p-1 rounded hover:bg-indigo-500 transition-colors"
-        aria-label="Menüyü aç/kapat"
+        onClick={onToggleInspector}
+        style={{
+          appearance: 'none', cursor: 'pointer',
+          padding: '6px 12px', height: 30,
+          background: inspectorOpen ? 'var(--b-06)' : 'transparent',
+          color: inspectorOpen ? '#fff' : 'var(--txt-2)',
+          border: '1px solid var(--b-08)', borderRadius: 6,
+          fontSize: 13, fontWeight: 400, letterSpacing: '-.005em',
+          transition: 'background .15s, color .15s',
+        }}
       >
-        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-        </svg>
+        Kaynaklar
       </button>
-      <span className="text-white font-semibold text-lg tracking-wide">YZTA RAG</span>
     </header>
   )
 }
