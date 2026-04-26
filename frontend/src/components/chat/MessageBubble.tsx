@@ -20,6 +20,13 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
           }`}
         >
           {message.content || (message.isStreaming ? <StreamingIndicator /> : null)}
+          
+          {message.isCached && !isUser && (
+            <span className="inline-flex items-center gap-1 text-[10px] ml-2 text-indigo-400 font-medium" title="Önbellekten hızlı yanıt">
+              (⚡ Hızlı)
+            </span>
+          )}
+
           {message.isStreaming && message.content && (
             <span className="inline-block w-0.5 h-4 bg-current ml-0.5 animate-pulse align-middle" />
           )}

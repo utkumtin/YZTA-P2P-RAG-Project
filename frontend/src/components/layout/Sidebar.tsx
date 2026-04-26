@@ -2,13 +2,32 @@ import { useUpload } from '../../hooks/useUpload'
 import UploadZone from '../upload/UploadZone'
 import UploadProgress from '../upload/UploadProgress'
 import FileList from '../upload/FileList'
+import type { Document, UploadingFile } from '../../types/document'
 
 interface SidebarProps {
   open: boolean
 }
 
 export default function Sidebar({ open }: SidebarProps) {
-  const { documents, uploading, upload, remove } = useUpload()
+  const { uploads, uploadFiles, removeUpload } = useUpload()
+
+  const documents: Document[] = uploads
+    .filter((u) => u.status === 'done' || u.status === 'error')
+    .map((u) => ({
+      document_id: u.document_id,
+      filename: u.filename,
+      created_at: new Date().toISOString(),
+      status: u.status === 'done' ? 'completed' : 'failed',
+    }))
+
+  const uploadingFiles: UploadingFile[] = uploads
+    .filter((u) => u.status !== 'done' && u.status !== 'error')
+    .map((u) => ({
+      id: u.document_id,
+      filename: u.filename,
+      progress: u.status === 'processing' ? 50 : 10,
+      error: u.error,
+    }))
 
   return (
     <aside
@@ -22,9 +41,9 @@ export default function Sidebar({ open }: SidebarProps) {
         <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider shrink-0">
           Dökümanlar
         </h2>
-        <UploadZone onFiles={upload} />
-        {uploading.length > 0 && <UploadProgress uploading={uploading} />}
-        <FileList documents={documents} onRemove={remove} />
+        <UploadZone onFiles={uploadFiles} />
+        {uploadingFiles.length > 0 && <UploadProgress uploading={uploadingFiles} />}
+        <FileList documents={documents} onRemove={removeUpload} />
       </div>
     </aside>
   )

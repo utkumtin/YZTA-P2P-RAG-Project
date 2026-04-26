@@ -1,14 +1,19 @@
-from pydantic import BaseModel
-from typing import Optional, List
+from pydantic import BaseModel, Field
 
-from app.services.chat_service import SourceInfo
 
 class SummarizeRequest(BaseModel):
-    document_ids: List[str]
-    max_length: Optional[int] = 500
+    document_ids: list[str]
+    session_id: str = "default"
+    max_length: int = 500
+
+
+class SourceInfo(BaseModel):
+    filename: str
+    page_number: int | None = None
+    doc_id: str
 
 
 class SummarizeResponse(BaseModel):
     summary: str
-    document_ids: List[str]
-    sources: List[SourceInfo]
+    document_ids: list[str]
+    sources: list[SourceInfo] = Field(default_factory=list)

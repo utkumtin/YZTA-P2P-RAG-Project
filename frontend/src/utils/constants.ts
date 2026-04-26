@@ -16,6 +16,7 @@ export const UPLOAD_POLL_INTERVAL_MS = 2000;
 
 export const SSE_EVENT_TYPES = {
   TOKEN: 'token',
+  CACHE_HIT: 'cache_hit',
   SOURCES: 'sources',
   DONE: 'done',
   ERROR: 'error',

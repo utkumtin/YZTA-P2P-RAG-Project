@@ -1,6 +1,7 @@
+import json
+
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
-import json
 
 from app.services.chat_service import ChatRequest, ChatResponse, SourceInfo
 
@@ -56,8 +57,11 @@ async def chat_stream(request: ChatRequest, req: Request):
                 request.session_id,
                 request.document_ids,
             ):
-                if isinstance(item, dict) and "__sources__" in item:
-                    yield f"data: {json.dumps({'type': 'sources', 'documents': item['__sources__']})}\n\n"
+                if isinstance(item, dict):
+                    if "__sources__" in item:
+                        yield f"data: {json.dumps({'type': 'sources', 'documents': item['__sources__']})}\n\n"
+                    elif "__cache_hit__" in item:
+                        yield f"data: {json.dumps({'type': 'cache_hit', 'content': item['answer']})}\n\n"
                 else:
                     yield f"data: {json.dumps({'type': 'token', 'content': item})}\n\n"
 

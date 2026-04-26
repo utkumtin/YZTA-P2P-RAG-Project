@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useSSE } from './useSSE';
 import { getSessionId } from '../utils/session';
 import { SSE_EVENT_TYPES } from '../utils/constants';
@@ -15,6 +15,7 @@ export interface Message {
   content: string;
   sources?: SourceInfo[];
   isStreaming?: boolean;
+  isCached?: boolean;
 }
 
 export interface UseChatReturn {
@@ -31,9 +32,28 @@ export function useChat(documentIds?: string[]): UseChatReturn {
   const [error, setError] = useState<string | null>(null);
   const { connect, disconnect } = useSSE();
   const streamingMessageIdRef = useRef<string | null>(null);
+  const isTypewritingRef = useRef<boolean>(false);
+  const typewritingIntervalRef = useRef<number | NodeJS.Timeout | null>(null);
+  const pendingSourcesRef = useRef<SourceInfo[] | null>(null);
+
+  const clearTypewriter = useCallback(() => {
+    if (typewritingIntervalRef.current) {
+      clearInterval(typewritingIntervalRef.current as number);
+      typewritingIntervalRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      clearTypewriter();
+    };
+  }, [clearTypewriter]);
 
   const sendMessage = useCallback((question: string) => {
     if (isStreaming) return;
+
+    clearTypewriter();
+    pendingSourcesRef.current = null;
 
     const userMessage: Message = {
       id: crypto.randomUUID?.() ?? Date.now().toString(),
@@ -72,15 +92,99 @@ export function useChat(documentIds?: string[]): UseChatReturn {
                 : msg
             )
           );
-        } else if (payload.type === SSE_EVENT_TYPES.SOURCES && payload.documents) {
+        } else if (payload.type === SSE_EVENT_TYPES.CACHE_HIT && payload.content !== undefined) {
+          isTypewritingRef.current = true;
+          const text = payload.content;
+          const targetId = streamingMessageIdRef.current;
+          
+          const TARGET_DURATION_MS = 800;
+          const ITERATION_MS = 25; 
+          const steps = Math.ceil(TARGET_DURATION_MS / ITERATION_MS); 
+          const chunkSize = Math.max(1, Math.floor(text.length / steps));
+
           setMessages((prev) =>
             prev.map((msg) =>
-              msg.id === streamingMessageIdRef.current
-                ? { ...msg, sources: payload.documents }
-                : msg
+              msg.id === targetId ? { ...msg, isCached: true } : msg
             )
           );
+
+          let currentLength = 0;
+          typewritingIntervalRef.current = setInterval(() => {
+            currentLength += chunkSize;
+            const chunk = text.slice(0, currentLength);
+            
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === targetId ? { ...msg, content: chunk } : msg
+              )
+            );
+
+            if (currentLength >= text.length) {
+              clearTypewriter();
+              isTypewritingRef.current = false;
+              
+              setMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === targetId 
+                    ? { 
+                        ...msg, 
+                        isStreaming: false,
+                        sources: pendingSourcesRef.current || msg.sources 
+                      } 
+                    : msg
+                )
+              );
+
+              if (streamingMessageIdRef.current === targetId) {
+                streamingMessageIdRef.current = null;
+                setIsStreaming(false);
+              }
+            }
+          }, ITERATION_MS);
+        } else if (payload.type === SSE_EVENT_TYPES.SOURCES && payload.documents) {
+          if (isTypewritingRef.current) {
+            pendingSourcesRef.current = payload.documents;
+          } else {
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === streamingMessageIdRef.current
+                  ? { ...msg, sources: payload.documents }
+                  : msg
+              )
+            );
+          }
         } else if (payload.type === SSE_EVENT_TYPES.DONE) {
+          if (!isTypewritingRef.current) {
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === streamingMessageIdRef.current
+                  ? { ...msg, isStreaming: false }
+                  : msg
+              )
+            );
+            streamingMessageIdRef.current = null;
+            setIsStreaming(false);
+          }
+          disconnect();
+        } else if (payload.type === SSE_EVENT_TYPES.ERROR) {
+          const errMsg = (payload as { type: string; message?: string }).message ?? 'Bilinmeyen hata';
+          if (!isTypewritingRef.current) {
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === streamingMessageIdRef.current
+                  ? { ...msg, isStreaming: false, content: msg.content || errMsg }
+                  : msg
+              )
+            );
+            streamingMessageIdRef.current = null;
+            setIsStreaming(false);
+          }
+          setError(errMsg);
+          disconnect();
+        }
+      },
+      onError: (err) => {
+        if (!isTypewritingRef.current) {
           setMessages((prev) =>
             prev.map((msg) =>
               msg.id === streamingMessageIdRef.current
@@ -90,36 +194,11 @@ export function useChat(documentIds?: string[]): UseChatReturn {
           );
           streamingMessageIdRef.current = null;
           setIsStreaming(false);
-          disconnect();
-        } else if (payload.type === SSE_EVENT_TYPES.ERROR) {
-          const errMsg = (payload as { type: string; message?: string }).message ?? 'Bilinmeyen hata';
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === streamingMessageIdRef.current
-                ? { ...msg, isStreaming: false, content: msg.content || errMsg }
-                : msg
-            )
-          );
-          streamingMessageIdRef.current = null;
-          setIsStreaming(false);
-          setError(errMsg);
-          disconnect();
         }
-      },
-      onError: (err) => {
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === streamingMessageIdRef.current
-              ? { ...msg, isStreaming: false }
-              : msg
-          )
-        );
-        streamingMessageIdRef.current = null;
-        setIsStreaming(false);
         setError(err.message);
       },
       onClose: () => {
-        if (streamingMessageIdRef.current) {
+        if (streamingMessageIdRef.current && !isTypewritingRef.current) {
           setMessages((prev) =>
             prev.map((msg) =>
               msg.id === streamingMessageIdRef.current

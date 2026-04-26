@@ -294,11 +294,12 @@ class RAGPipeline:
         if self.cache:
             cached = await self.cache.get(question)
             if cached:
-                # Cache hit — hazır cevabı tek parça yield et
+                # Cache hit — hazır cevabı backend'de stream etmiyoruz,
+                # frontend'e type='cache_hit' olarak bildirmesi için özel dict yield ediyoruz.
                 if trace:
                     trace.update(tags=["cache-hit"])
                     trace.end(output=cached["answer"])
-                yield cached["answer"]
+                yield {"__cache_hit__": True, "answer": cached["answer"]}
                 yield {"__sources__": cached.get("sources", [])}
                 return
 
@@ -445,6 +446,7 @@ class RAGPipeline:
         self,
         doc_ids: list[str],
         session_id: str,
+        max_length: int = 500,
     ) -> tuple[str, list[dict]]:
         """
         Seçili dokümanların özetini çıkarır (Map-Reduce stratejisi).
@@ -458,6 +460,7 @@ class RAGPipeline:
         Args:
             doc_ids: Özetlenecek doküman ID'leri
             session_id: Kullanıcı oturum kimliği
+            max_length: İstenen nihai özet uzunluğu (kelime)
 
         Returns:
             (özet_metni, kaynak_listesi)
@@ -471,7 +474,16 @@ class RAGPipeline:
             all_parents.extend(parents)
 
         if not all_parents:
-            return "Özetlenecek içerik bulunamadı.", []
+            return "", []
+
+        # Tek chunk varsa Reduce gereksiz — doğrudan nihai özeti çıkar.
+        if len(all_parents) == 1:
+            single_chunk_prompt = f"Aşağıdaki metnin yaklaşık {max_length} kelimelik bir özetini çıkar:\n\n{all_parents[0]['text']}"
+            single_summary = await self.llm_client.generate(
+                single_chunk_prompt, SUMMARY_SYSTEM_PROMPT
+            )
+            sources = self._extract_sources(all_parents)
+            return single_summary, sources
 
         # MAP: Her parent chunk için ayrı mini-özet.
         # LLM çağrıları sıralı yapılıyor; paralel yapılsa hızlanır ama
@@ -483,16 +495,12 @@ class RAGPipeline:
             mini = await self.llm_client.generate(prompt, SUMMARY_SYSTEM_PROMPT)
             mini_summaries.append(mini)
 
-        # Tek chunk varsa Reduce gereksiz — mini-özet zaten nihai özet.
-        if len(mini_summaries) == 1:
-            sources = self._extract_sources(all_parents)
-            return mini_summaries[0], sources
-
         # REDUCE: Mini-özetleri birleştir, tutarlı bir nihai özet üret.
         combined = "\n\n---\n\n".join(mini_summaries)
         reduce_prompt = (
             "Aşağıda bir dokümanın farklı bölümlerinin özetleri verilmiştir.\n"
-            "Bu özetleri birleştirerek kapsamlı, tutarlı ve akıcı bir nihai özet oluştur.\n\n"
+            f"Bu özetleri birleştirerek yaklaşık {max_length} kelimelik kapsamlı, "
+            "tutarlı ve akıcı bir nihai özet oluştur.\n\n"
             f"{combined}\n\nNİHAİ ÖZET:"
         )
         final_summary = await self.llm_client.generate(reduce_prompt, SUMMARY_SYSTEM_PROMPT)
