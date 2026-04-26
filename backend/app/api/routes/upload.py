@@ -41,10 +41,12 @@ async def upload_documents(
             contents = await file.read()
             async with aiofiles.open(save_path, "wb") as f:
                 await f.write(contents)
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Dosya kaydedilemedi: {str(e)}")
 
-        job = await arq_redis.enqueue_job("ingest_document", document_id, save_path)
+            job = await arq_redis.enqueue_job("ingest_document", document_id, save_path)
+        except Exception as e:
+            if os.path.exists(save_path):
+                os.remove(save_path)
+            raise HTTPException(status_code=500, detail=f"Dosya işlenemedi: {str(e)}")
 
         responses.append(DocumentUploadResponse(
             job_id=job.job_id,
