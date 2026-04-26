@@ -1,8 +1,9 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File, Request
-from typing import List
-import uuid
 import os
+import unicodedata
+import uuid
+
 import aiofiles
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 
 from app.config import get_settings
 from app.services.document_service import DocumentUploadResponse
@@ -13,27 +14,60 @@ settings = get_settings()
 ALLOWED = set(settings.ALLOWED_EXTENSIONS)
 
 
-def validate_file(file: UploadFile):
-    ext = file.filename.split(".")[-1].lower()
+def sanitize_filename(raw_name: str | None) -> str:
+    if not raw_name or not str(raw_name).strip():
+        raise HTTPException(status_code=400, detail="Dosya adı boş olamaz")
+
+    normalized_path = str(raw_name).replace("\\", "/")
+    basename = os.path.basename(normalized_path)
+    nfc = unicodedata.normalize("NFC", basename)
+    filtered = "".join(c for c in nfc if unicodedata.category(c)[0] != "C")
+
+    if not filtered:
+        raise HTTPException(status_code=400, detail="Geçerli bir dosya adı bulunamadı")
+
+    parts = filtered.rsplit(".", 1)
+    if len(parts) == 1:
+        stem = parts[0]
+        ext = ""
+    else:
+        stem = parts[0]
+        ext = "." + parts[1]
+        if not parts[1].strip():
+            raise HTTPException(status_code=400, detail="Geçersiz dosya uzantısı")
+
+    if not stem.strip(" .\t"):
+        raise HTTPException(status_code=400, detail="Geçerli bir dosya adı gövdesi bulunamadı")
+
+    max_len = 255
+    if len(stem) + len(ext) > max_len:
+        stem = stem[: max_len - len(ext)]
+
+    return stem + ext
+
+
+def validate_file(filename: str):
+    ext = filename.rsplit(".")[-1].lower() if "." in filename else ""
     if ext not in ALLOWED:
         raise HTTPException(
-            status_code=400,
-            detail=f"Desteklenmeyen format: .{ext}. İzin verilenler: {ALLOWED}"
+            status_code=400, detail=f"Desteklenmeyen format: .{ext}. İzin verilenler: {ALLOWED}"
         )
     return ext
 
 
-@router.post("", response_model=List[DocumentUploadResponse])
+@router.post("", response_model=list[DocumentUploadResponse])
 async def upload_documents(
     request: Request,
-    files: List[UploadFile] = File(...),
+    files: list[UploadFile] = File(...),
     session_id: str = "default",
 ):
     arq_redis = request.app.state.arq_redis
     responses = []
 
     for file in files:
-        ext = validate_file(file)
+        sanitized_filename = sanitize_filename(file.filename)
+        ext = validate_file(sanitized_filename)
+
         document_id = str(uuid.uuid4())
         save_path = os.path.join(settings.UPLOAD_DIR, f"{document_id}.{ext}")
 
@@ -42,18 +76,22 @@ async def upload_documents(
             async with aiofiles.open(save_path, "wb") as f:
                 await f.write(contents)
 
-            job = await arq_redis.enqueue_job("ingest_document", document_id, save_path)
+            job = await arq_redis.enqueue_job(
+                "ingest_document", document_id, save_path, sanitized_filename
+            )
         except Exception as e:
             if os.path.exists(save_path):
                 os.remove(save_path)
             raise HTTPException(status_code=500, detail=f"Dosya işlenemedi: {str(e)}")
 
-        responses.append(DocumentUploadResponse(
-            job_id=job.job_id,
-            document_id=document_id,
-            filename=file.filename,
-            status="queued",
-            message="Dosya alındı, işleme kuyruğa alındı.",
-        ))
+        responses.append(
+            DocumentUploadResponse(
+                job_id=job.job_id,
+                document_id=document_id,
+                filename=sanitized_filename,
+                status="queued",
+                message="Dosya alındı, işleme kuyruğa alındı.",
+            )
+        )
 
     return responses

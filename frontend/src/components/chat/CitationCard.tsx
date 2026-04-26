@@ -18,7 +18,7 @@ export default function CitationCard({ source, index }: CitationCardProps) {
         <span className="shrink-0 w-5 h-5 bg-indigo-100 text-indigo-700 rounded-full flex items-center justify-center font-semibold text-[10px]">
           {index}
         </span>
-        <span className="truncate text-gray-700 font-medium">{source.filename}</span>
+        <span className="truncate text-gray-700 font-medium">{source.filename || 'Belge (eski yükleme)'}</span>
         <span className="ml-auto text-gray-400">{open ? '▲' : '▼'}</span>
       </button>
       {open && (

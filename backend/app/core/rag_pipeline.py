@@ -95,6 +95,7 @@ class RAGPipeline:
         file_path: str,
         doc_id: str,
         session_id: str,
+        original_filename: str | None = None,
         progress_callback=None,
     ) -> dict:
         """
@@ -123,10 +124,23 @@ class RAGPipeline:
 
         result = self.processor.process(file_path, doc_id=doc_id)
 
+        filename_to_use = original_filename if original_filename else result["filename"]
+
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.debug(
+            "Ingesting document %s. original_filename present: %s, length: %d, had_unicode: %s",
+            doc_id,
+            bool(original_filename),
+            len(filename_to_use),
+            any(ord(c) > 127 for c in filename_to_use),
+        )
+
         # 2. Metadata hazırlama
         metadata = {
             "doc_id": doc_id,
-            "filename": result["filename"],
+            "filename": filename_to_use,
             "file_type": result["file_type"],
             "language": result["language"],
             "session_id": session_id,
