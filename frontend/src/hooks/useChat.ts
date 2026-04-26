@@ -33,7 +33,7 @@ export function useChat(documentIds?: string[]): UseChatReturn {
   const { connect, disconnect } = useSSE();
   const streamingMessageIdRef = useRef<string | null>(null);
   const isTypewritingRef = useRef<boolean>(false);
-  const typewritingIntervalRef = useRef<number | NodeJS.Timeout | null>(null);
+  const typewritingIntervalRef = useRef<number | null>(null);
   const pendingSourcesRef = useRef<SourceInfo[] | null>(null);
 
   const clearTypewriter = useCallback(() => {
