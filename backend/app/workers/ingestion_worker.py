@@ -1,94 +1,83 @@
-import logging
 import json
+import logging
+import os
+
 from arq.connections import RedisSettings
+
 from app.config import get_settings
-
-from app.core.rag_pipeline import RAGPipeline
-from app.core.embedder import Embedder
-from app.core.vector_store import VectorStore
-from app.core.reranker import Reranker
-
+from app.core.embedder import get_embedder
 from app.core.llm_client import create_llm_client
-from app.core.semantic_cache import SemanticCache
+from app.core.rag_pipeline import RAGPipeline
+from app.core.reranker import Reranker
+from app.core.vector_store import VectorStore
 
 settings = get_settings()
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("worker")
+logger = logging.getLogger(__name__)
 
-# Sağlayıcıya göre uygun API anahtarını seçiyoruz
-api_key = settings.GROQ_API_KEY if settings.LLM_PROVIDER.lower() == "groq" else settings.GOOGLE_API_KEY
 
-pipeline = RAGPipeline(
-    embedder=Embedder(),
-    vector_store=VectorStore(),
-    reranker=Reranker(),
-    llm_client=create_llm_client(
-        provider=settings.LLM_PROVIDER,
-        api_key=api_key
-    ),
-    cache=SemanticCache()
-)
+async def ingest_document(ctx: dict, document_id: str, file_path: str) -> dict:
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"File not found: {file_path}")
 
-async def ingest_document(ctx, document_id: str, file_path: str , session_id: str = "default"):
-    """Dosyayı RAG pipeline'ı üzerinden işleyen worker görevi."""
-    logger.info(f"[BAŞLADI] Doküman işleniyor: ID={document_id}, Yol={file_path}")
-    redis = ctx['redis']
+    job_id: str = ctx["job_id"]
+    redis = ctx["redis"]
+    pipeline: RAGPipeline = ctx["rag_pipeline"]
 
-    #rag_pipeline.py'den gelecek güncellemeleri Redis'e yazacak fonksiyon
-    async def progress_updater(step: str, progress: float):
-        status_data = {
-            "document_id": document_id,
-            "status": "processing",
-            "step": step,
-            "progress": progress
-        }
-        # Redis'e 1 saat (3600 sn) geçerli olacak şekilde yazıyoruz
-        await redis.setex(f"doc_status:{document_id}", 3600, json.dumps(status_data))
-        await redis.publish(f"doc_channel:{document_id}", json.dumps(status_data))
-        logger.info(f"[{document_id}] Durum: {step} (%{int(progress*100)})")
+    async def _write_progress(stage: str, pct: int, event: str = "progress") -> None:
+        await redis.set(
+            f"progress:{job_id}",
+            json.dumps({"stage": stage, "pct": pct, "event": event}),
+            ex=3600,
+        )
 
     try:
-        # rag_pipeline.py içindeki ana fonksiyonu çağırıyoruz
+        await _write_progress("parsing", 10)
+        await _write_progress("embedding", 40)
         result = await pipeline.ingest_document(
             file_path=file_path,
             doc_id=document_id,
-            session_id=session_id,
-            progress_callback=progress_updater
+            session_id="default",
         )
-
-        final_status = {
-            "document_id": document_id,
-            "status": "completed",
-            "step": "Tamamlandı",
-            "progress": 1.0,
-            "result": result
-        }
-        await redis.setex(f"doc_status:{document_id}", 3600, json.dumps(final_status))
-        await redis.publish(f"doc_channel:{document_id}", json.dumps(final_status))
-
-        logger.info(f"[TAMAMLANDI] Doküman başarıyla indekslendi: {result}")
+        await _write_progress("indexing", 80)
+        await _write_progress("done", 100, event="done")
+        logger.info("Document %s ingested: %s", document_id, result)
         return result
-    except Exception as e:
-        #frontendde takili kalmasin diye failed durum yazildi
-        error_status = {
-            "document_id": document_id,
-            "status": "failed",
-            "step": "Hata oluştu",
-            "progress": 0.0,
-            "error": str(e)
-        }
-        await redis.setex(f"doc_status:{document_id}", 3600, json.dumps(error_status))
-        await redis.publish(f"doc_channel:{document_id}", json.dumps(error_status))
-        logger.error(f"[HATA] Pipeline işleme sırasında hata: {str(e)}")
-        raise e
+    except Exception:
+        logger.exception("Failed to ingest document %s", document_id)
+        await redis.set(
+            f"progress:{job_id}",
+            json.dumps({"stage": "failed", "pct": 0, "event": "error", "message": "Ingestion failed"}),
+            ex=3600,
+        )
+        raise
 
 
-async def startup(ctx):
-    logger.info("Worker görevleri dinlemeye başladı.")
+async def startup(ctx: dict) -> None:
+    await ctx["redis"].ping()
+    logger.info("Redis connection OK")
+
+    embedder = get_embedder()
+    vector_store = VectorStore(host=settings.QDRANT_HOST, port=settings.QDRANT_PORT)
+    vector_store.setup()
+    reranker = Reranker(model_name=settings.RERANKER_MODEL)
+
+    api_key = settings.GROQ_API_KEY if settings.LLM_PROVIDER == "groq" else settings.GOOGLE_API_KEY
+    llm_client = create_llm_client(provider=settings.LLM_PROVIDER, api_key=api_key)
+
+    pipeline = RAGPipeline(
+        embedder=embedder,
+        vector_store=vector_store,
+        reranker=reranker,
+        llm_client=llm_client,
+        search_top_k=settings.HYBRID_SEARCH_TOP_K,
+        final_top_k=settings.FINAL_TOP_K,
+    )
+    ctx["rag_pipeline"] = pipeline
+    logger.info("RAG pipeline initialized")
 
 
-async def shutdown(ctx):
-    logger.info("Worker kapatılıyor.")
+async def shutdown(ctx: dict) -> None:
+    logger.info("Worker shutting down")
 
 
 class WorkerSettings:
@@ -100,3 +89,5 @@ class WorkerSettings:
         port=settings.REDIS_PORT,
         database=settings.REDIS_DB,
     )
+    job_timeout = 300
+    max_tries = 3

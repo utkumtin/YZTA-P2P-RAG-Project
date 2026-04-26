@@ -270,7 +270,7 @@ class RAGPipeline:
         question: str,
         session_id: str,
         doc_ids: list[str] | None = None,
-    ) -> AsyncGenerator[str]:
+    ) -> AsyncGenerator[str | dict]:
         """
         Streaming soru-cevap pipeline'ı.
 
@@ -299,6 +299,7 @@ class RAGPipeline:
                     trace.update(tags=["cache-hit"])
                     trace.end(output=cached["answer"])
                 yield cached["answer"]
+                yield {"__sources__": cached.get("sources", [])}
                 return
 
         # Retrieval + parent resolution
@@ -309,6 +310,7 @@ class RAGPipeline:
             if trace:
                 trace.end(output=ans)
             yield ans
+            yield {"__sources__": []}
             return
 
         prompt = build_rag_prompt(question, context_chunks)
@@ -330,8 +332,9 @@ class RAGPipeline:
         if generation:
             generation.end(output=full_answer)
 
-        # Stream bittikten sonra cache'e kaydet
+        # Stream bittikten sonra kaynakları yield et, ardından cache'e kaydet
         sources = self._extract_sources(context_chunks)
+        yield {"__sources__": sources}
         if self.cache:
             await self.cache.set(
                 question,

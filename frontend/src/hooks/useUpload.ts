@@ -1,101 +1,170 @@
-import { useEffect, useRef } from 'react'
-import { useDocumentStore } from '../store/documentStore'
-import { useChatStore } from '../store/chatStore'
-import { listDocuments, uploadFiles, deleteDocument } from '../services/documentService'
-import { validateFile } from '../utils/validators'
-import { UPLOAD_POLL_INTERVAL_MS } from '../utils/constants'
+import { useState, useCallback, useRef } from 'react';
+import axios from 'axios';
+import { validateFile } from '../utils/validators';
+import { DOC_STATUS, UPLOAD_POLL_INTERVAL_MS } from '../utils/constants';
 
-export function useUpload() {
-  const {
-    documents,
-    uploading,
-    setDocuments,
-    upsertDocument,
-    removeDocument,
-    addUploading,
-    updateUploading,
-    removeUploading,
-  } = useDocumentStore()
-  const sessionId = useChatStore((s) => s.sessionId)
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+export type UploadStatus = 'idle' | 'uploading' | 'processing' | 'done' | 'error';
 
-  useEffect(() => {
-    listDocuments().then(setDocuments).catch(() => {})
-  }, [])
+export interface UploadedFile {
+  document_id: string;
+  filename: string;
+  status: UploadStatus;
+  error?: string;
+}
 
-  useEffect(() => {
-    const hasActive = documents.some(
-      (d) => d.status === 'queued' || d.status === 'processing'
-    )
+interface DocumentUploadResponse {
+  document_id: string;
+  filename: string;
+  status: string;
+  message: string;
+}
 
-    if (hasActive && !intervalRef.current) {
-      intervalRef.current = setInterval(async () => {
-        try {
-          const updated = await listDocuments()
-          updated.forEach((d) => upsertDocument(d))
-          const stillActive = updated.some(
-            (d) => d.status === 'queued' || d.status === 'processing'
-          )
-          if (!stillActive && intervalRef.current) {
-            clearInterval(intervalRef.current)
-            intervalRef.current = null
-          }
-        } catch {
-          // polling failure — keep trying
+interface DocumentListItem {
+  document_id: string;
+  filename: string;
+  status: string;
+}
+
+interface DocumentListResponse {
+  documents: DocumentListItem[];
+  total: number;
+}
+
+export interface UseUploadReturn {
+  uploads: UploadedFile[];
+  isUploading: boolean;
+  uploadFiles: (files: File[]) => Promise<void>;
+  removeUpload: (documentId: string) => void;
+  clearUploads: () => void;
+}
+
+export function useUpload(): UseUploadReturn {
+  const [uploads, setUploads] = useState<UploadedFile[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const pollingIntervalsRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
+
+  const stopPolling = useCallback((documentId: string) => {
+    const interval = pollingIntervalsRef.current.get(documentId);
+    if (interval) {
+      clearInterval(interval);
+      pollingIntervalsRef.current.delete(documentId);
+    }
+  }, []);
+
+  const startPolling = useCallback((documentId: string) => {
+    // TODO(Faz 3): /api/tasks/{job_id}/progress SSE endpoint hazır olduğunda
+    // polling yerine SSE stream kullan
+
+    const interval = setInterval(async () => {
+      try {
+        const response = await axios.get<DocumentListResponse>('/api/routes/documents');
+        const doc = response.data.documents.find((d) => d.document_id === documentId);
+
+        if (!doc) return;
+
+        if (doc.status === DOC_STATUS.COMPLETED) {
+          setUploads((prev) =>
+            prev.map((u) =>
+              u.document_id === documentId ? { ...u, status: 'done' } : u
+            )
+          );
+          stopPolling(documentId);
+        } else if (doc.status === DOC_STATUS.FAILED) {
+          setUploads((prev) =>
+            prev.map((u) =>
+              u.document_id === documentId
+                ? { ...u, status: 'error', error: 'Belge işleme başarısız' }
+                : u
+            )
+          );
+          stopPolling(documentId);
         }
-      }, UPLOAD_POLL_INTERVAL_MS)
-    }
+      } catch {
+        // Polling hatalarını sessizce geç, bir sonraki interval'de tekrar dene
+      }
+    }, UPLOAD_POLL_INTERVAL_MS);
 
-    if (!hasActive && intervalRef.current) {
-      clearInterval(intervalRef.current)
-      intervalRef.current = null
-    }
+    pollingIntervalsRef.current.set(documentId, interval);
+  }, [stopPolling]);
 
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current)
-        intervalRef.current = null
+  const uploadFiles = useCallback(async (files: File[]) => {
+    const validFiles: File[] = [];
+    const invalidEntries: UploadedFile[] = [];
+
+    for (const file of files) {
+      const result = validateFile(file);
+      if (result.valid) {
+        validFiles.push(file);
+      } else {
+        invalidEntries.push({
+          document_id: crypto.randomUUID?.() ?? Date.now().toString(),
+          filename: file.name,
+          status: 'error',
+          error: result.error,
+        });
       }
     }
-  }, [documents])
 
-  async function upload(files: File[]) {
-    const validFiles = files.filter((f) => validateFile(f).valid)
-    if (validFiles.length === 0) return
-
-    const uploadingEntries = validFiles.map((f) => ({
-      id: crypto.randomUUID(),
-      filename: f.name,
-      progress: 0,
-    }))
-    uploadingEntries.forEach((e) => addUploading(e))
-
-    try {
-      const uploaded = await uploadFiles(validFiles, sessionId, (fileIndex, progress) => {
-        updateUploading(uploadingEntries[fileIndex].id, { progress })
-      })
-      uploaded.forEach((doc) => upsertDocument(doc))
-    } catch {
-      uploadingEntries.forEach((e) =>
-        updateUploading(e.id, { error: 'Yükleme başarısız' })
-      )
-      setTimeout(() => {
-        uploadingEntries.forEach((e) => removeUploading(e.id))
-      }, 3000)
-      return
+    if (invalidEntries.length > 0) {
+      setUploads((prev) => [...prev, ...invalidEntries]);
     }
 
-    uploadingEntries.forEach((e) => removeUploading(e.id))
-  }
+    if (validFiles.length === 0) return;
 
-  async function remove(documentId: string) {
-    try {
-      await deleteDocument(documentId)
-      removeDocument(documentId)
-    } catch {
-      // silme hatası — kullanıcıya yansıtmıyoruz
+    setIsUploading(true);
+
+    const formData = new FormData();
+    for (const file of validFiles) {
+      formData.append('files', file);
     }
-  }
 
-  return { documents, uploading, upload, remove }
+    try {
+      const response = await axios.post<DocumentUploadResponse[]>(
+        '/api/routes/upload',
+        formData,
+        { headers: { 'Content-Type': 'multipart/form-data' } }
+      );
+
+      const uploadedEntries: UploadedFile[] = response.data.map((item) => ({
+        document_id: item.document_id,
+        filename: item.filename,
+        status: 'processing' as UploadStatus,
+      }));
+
+      setUploads((prev) => [...prev, ...uploadedEntries]);
+
+      for (const entry of uploadedEntries) {
+        startPolling(entry.document_id);
+      }
+    } catch (err) {
+      const message =
+        axios.isAxiosError(err) && err.response?.data?.detail
+          ? String(err.response.data.detail)
+          : 'Yükleme başarısız';
+
+      const errorEntries: UploadedFile[] = validFiles.map((file) => ({
+        document_id: crypto.randomUUID?.() ?? Date.now().toString(),
+        filename: file.name,
+        status: 'error' as UploadStatus,
+        error: message,
+      }));
+
+      setUploads((prev) => [...prev, ...errorEntries]);
+    } finally {
+      setIsUploading(false);
+    }
+  }, [startPolling]);
+
+  const removeUpload = useCallback((documentId: string) => {
+    stopPolling(documentId);
+    setUploads((prev) => prev.filter((u) => u.document_id !== documentId));
+  }, [stopPolling]);
+
+  const clearUploads = useCallback(() => {
+    pollingIntervalsRef.current.forEach((_, id) => stopPolling(id));
+    setUploads([]);
+    setIsUploading(false);
+  }, [stopPolling]);
+
+  return { uploads, isUploading, uploadFiles, removeUpload, clearUploads };
 }

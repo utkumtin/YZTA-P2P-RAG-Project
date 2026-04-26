@@ -1,12 +1,19 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from arq import create_pool
-from arq.connections import RedisSettings
 import os
 
+import logging
+
+from arq.connections import create_pool, RedisSettings
+
 from app.config import get_settings
-from app.api.routes import documents, chat, summarize, health, upload
+from app.api.routes import documents, chat, summarize, health, upload, tasks
+from app.core.embedder import get_embedder
+from app.core.llm_client import create_llm_client
+from app.core.rag_pipeline import RAGPipeline
+from app.core.reranker import Reranker
+from app.core.vector_store import VectorStore
 
 settings = get_settings()
 
@@ -17,14 +24,14 @@ async def lifespan(app: FastAPI):
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     os.makedirs(settings.HF_HOME, exist_ok=True)
 
-    app.state.redis_pool = await create_pool(
+    arq_redis = await create_pool(
         RedisSettings(
             host=settings.REDIS_HOST,
             port=settings.REDIS_PORT,
             database=settings.REDIS_DB,
         )
     )
-    print("ARQ Worker Redis havuzu başarıyla oluşturuldu.")
+    app.state.arq_redis = arq_redis
 
     app.state.semantic_cache = None
     if settings.SEMANTIC_CACHE_ENABLED:
@@ -47,15 +54,41 @@ async def lifespan(app: FastAPI):
             await sc.load_from_redis()
             app.state.semantic_cache = sc
             app.state.redis_client = redis_client
-        except Exception as e:
-            print(f"Semantic Cache başlatılamadı: {e}")
+        except Exception:
+            pass
+
+    app.state.rag_pipeline = None
+    try:
+        embedder = get_embedder()
+        vector_store = VectorStore(
+            host=settings.QDRANT_HOST,
+            port=settings.QDRANT_PORT,
+        )
+        vector_store.setup()
+        reranker = Reranker(model_name=settings.RERANKER_MODEL)
+        api_key = (
+            settings.GROQ_API_KEY
+            if settings.LLM_PROVIDER == "groq"
+            else settings.GOOGLE_API_KEY
+        )
+        llm_client = create_llm_client(settings.LLM_PROVIDER, api_key)
+        app.state.rag_pipeline = RAGPipeline(
+            embedder=embedder,
+            vector_store=vector_store,
+            reranker=reranker,
+            llm_client=llm_client,
+            cache=app.state.semantic_cache,
+            search_top_k=settings.HYBRID_SEARCH_TOP_K,
+            final_top_k=settings.FINAL_TOP_K,
+        )
+    except Exception as e:
+        logging.getLogger(__name__).warning(f"RAG pipeline başlatılamadı: {e}")
 
     yield
 
-    if hasattr(app.state, "redis_pool") and app.state.redis_pool is not None:
+    if hasattr(app.state, "arq_redis") and app.state.arq_redis is not None:
         try:
-            await app.state.redis_pool.close()
-            print("ARQ Worker Redis havuzu kapatıldı.")
+            await app.state.arq_redis.aclose()
         except Exception:
             pass
 
@@ -86,3 +119,4 @@ app.include_router(documents.router, prefix="/api/routes/documents", tags=["docu
 app.include_router(upload.router,    prefix="/api/routes/upload",    tags=["upload"])
 app.include_router(chat.router,      prefix="/api/routes/chat",      tags=["chat"])
 app.include_router(summarize.router, prefix="/api/routes/summarize", tags=["summarize"])
+app.include_router(tasks.router,     prefix="/api/routes/tasks",     tags=["tasks"])
