@@ -354,6 +354,49 @@ class VectorStore:
             )
         return parents
 
+    def list_documents(self, session_id: str) -> list[dict]:
+        """
+        Bir session'a ait tüm unique dokümanları döndürür.
+
+        Parent koleksiyonunu scroll ederek benzersiz doc_id + filename
+        çiftlerini toplar. Büyük koleksiyonlar için offset-based scroll
+        kullanılır.
+
+        Returns:
+            list[dict]: [{"doc_id": str, "filename": str, "chunk_count": int}, ...]
+        """
+        seen: dict[str, dict] = {}
+        offset = None
+
+        while True:
+            points, next_offset = self.client.scroll(
+                collection_name=self.PARENT_COLLECTION,
+                scroll_filter=Filter(
+                    must=[FieldCondition(key="session_id", match=MatchValue(value=session_id))]
+                ),
+                limit=200,
+                offset=offset,
+                with_payload=True,
+            )
+
+            for point in points:
+                doc_id = point.payload.get("doc_id")
+                if not doc_id:
+                    continue
+                if doc_id not in seen:
+                    seen[doc_id] = {
+                        "doc_id": doc_id,
+                        "filename": point.payload.get("filename", ""),
+                        "chunk_count": 0,
+                    }
+                seen[doc_id]["chunk_count"] += 1
+
+            if next_offset is None:
+                break
+            offset = next_offset
+
+        return list(seen.values())
+
     def delete_document(self, doc_id: str, session_id: str):
         """
         Bir dokümanın tüm chunk'larını siler (child + parent).

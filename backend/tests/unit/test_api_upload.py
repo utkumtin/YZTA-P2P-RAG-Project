@@ -22,6 +22,18 @@ def _aiofiles_mock():
     return cm
 
 
+def _http_req():
+    job_mock = MagicMock()
+    job_mock.job_id = "test-job-id"
+
+    arq_mock = AsyncMock()
+    arq_mock.enqueue_job = AsyncMock(return_value=job_mock)
+
+    r = MagicMock()
+    r.app.state.arq_redis = arq_mock
+    return r
+
+
 def test_gecersiz_uzanti_reddedilir():
     with pytest.raises(HTTPException) as exc:
         validate_file(_dosya("kotu.exe"))
@@ -43,28 +55,41 @@ def test_docx_uzantisi_kabul_edilir():
     assert ext == "docx"
 
 
+@pytest.mark.asyncio
 async def test_pdf_yukleme_queued_doner():
     with patch("aiofiles.open", return_value=_aiofiles_mock()):
-        result = await upload_documents(files=[_dosya()], session_id="sess-001")
+        result = await upload_documents(
+            request=_http_req(), files=[_dosya()], session_id="sess-001"
+        )
     assert len(result) == 1
     assert result[0].status == "queued"
     assert result[0].filename == "sozlesme.pdf"
+    assert result[0].job_id == "test-job-id"
 
 
+@pytest.mark.asyncio
 async def test_coklu_dosya_yukleme():
     dosyalar = [_dosya("a.pdf"), _dosya("b.docx"), _dosya("c.txt")]
     with patch("aiofiles.open", return_value=_aiofiles_mock()):
-        result = await upload_documents(files=dosyalar, session_id="sess-002")
+        result = await upload_documents(
+            request=_http_req(), files=dosyalar, session_id="sess-002"
+        )
     assert len(result) == 3
 
 
+@pytest.mark.asyncio
 async def test_her_dosyaya_benzersiz_id_atanir():
     dosyalar = [_dosya("x.pdf"), _dosya("y.pdf")]
     with patch("aiofiles.open", return_value=_aiofiles_mock()):
-        result = await upload_documents(files=dosyalar, session_id="s")
+        result = await upload_documents(
+            request=_http_req(), files=dosyalar, session_id="s"
+        )
     assert result[0].document_id != result[1].document_id
 
 
+@pytest.mark.asyncio
 async def test_gecersiz_uzanti_http_exception_firlatir():
     with pytest.raises(HTTPException):
-        await upload_documents(files=[_dosya("virus.sh")], session_id="s")
+        await upload_documents(
+            request=_http_req(), files=[_dosya("virus.sh")], session_id="s"
+        )

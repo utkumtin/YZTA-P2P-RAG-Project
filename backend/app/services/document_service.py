@@ -4,6 +4,7 @@ from datetime import datetime
 
 
 class DocumentUploadResponse(BaseModel):
+    job_id: str
     document_id: str
     filename: str
     status: str

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException , UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File, Request
 from typing import List
 import uuid
 import os
@@ -24,8 +24,12 @@ def validate_file(file: UploadFile):
 
 
 @router.post("", response_model=List[DocumentUploadResponse])
-async def upload_documents( files: List[UploadFile] = File(...),
-    session_id: str = "default"):
+async def upload_documents(
+    request: Request,
+    files: List[UploadFile] = File(...),
+    session_id: str = "default",
+):
+    arq_redis = request.app.state.arq_redis
     responses = []
 
     for file in files:
@@ -40,10 +44,10 @@ async def upload_documents( files: List[UploadFile] = File(...),
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Dosya kaydedilemedi: {str(e)}")
 
-        # pipeline buraya bağlanacak
-        # await rag_pipeline.process(document_id, save_path)
+        job = await arq_redis.enqueue_job("ingest_document", document_id, save_path)
 
         responses.append(DocumentUploadResponse(
+            job_id=job.job_id,
             document_id=document_id,
             filename=file.filename,
             status="queued",
