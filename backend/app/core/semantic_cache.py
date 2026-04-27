@@ -46,24 +46,29 @@ class SemanticCache:
         except Exception:
             pass
 
-    async def get(self, query: str) -> Optional[dict]:
+    async def get(self, query: str, namespace: str = "") -> Optional[dict]:
         if not self._index:
             return None
         try:
+            prefix = f"sc:{namespace}:" if namespace else "sc:"
+            ns_index = {k: v for k, v in self._index.items() if k.startswith(prefix)}
+            if not ns_index:
+                return None
             query_vec = self._embedder.embed(query)
-            best_key, best_score = self._find_best_match(query_vec)
+            best_key, best_score = self._find_best_match(query_vec, ns_index)
             if best_score >= self._threshold:
                 return self._meta[best_key]["response"]
         except Exception:
             pass
         return None
 
-    async def set(self, query: str, response: dict) -> None:
+    async def set(self, query: str, response: dict, namespace: str = "") -> None:
         try:
             if len(self._index) >= self._max_size:
                 await self._evict_oldest()
             query_vec = self._embedder.embed(query)
-            key = f"sc:{uuid.uuid4().hex}"
+            prefix = f"sc:{namespace}:" if namespace else "sc:"
+            key = f"{prefix}{uuid.uuid4().hex}"
             entry = {
                 "query": query,
                 "response": response,
@@ -89,13 +94,15 @@ class SemanticCache:
         except Exception:
             pass
 
-    def _find_best_match(self, query_vec: np.ndarray) -> tuple[str, float]:
+    def _find_best_match(self, query_vec: np.ndarray, index: dict = None) -> tuple[str, float]:
+        if index is None:
+            index = self._index
         best_key = ""
         best_score = -1.0
         q_norm = np.linalg.norm(query_vec)
         if q_norm == 0:
             return best_key, best_score
-        for key, vec in self._index.items():
+        for key, vec in index.items():
             v_norm = np.linalg.norm(vec)
             if v_norm == 0:
                 continue

@@ -231,7 +231,7 @@ class RAGPipeline:
             )
 
         if self.cache:
-            cached = await self.cache.get(question)
+            cached = await self.cache.get(question, self._cache_namespace(doc_ids))
             if cached:
                 if trace:
                     trace.update(tags=["cache-hit"])
@@ -269,7 +269,7 @@ class RAGPipeline:
 
         # 7. Cache'e kaydet
         if self.cache:
-            await self.cache.set(question, {"answer": answer, "sources": sources})
+            await self.cache.set(question, {"answer": answer, "sources": sources}, self._cache_namespace(doc_ids))
 
         if trace:
             trace.end(output=answer)
@@ -307,7 +307,7 @@ class RAGPipeline:
             )
 
         if self.cache:
-            cached = await self.cache.get(question)
+            cached = await self.cache.get(question, self._cache_namespace(doc_ids))
             if cached:
                 # Cache hit — hazır cevabı backend'de stream etmiyoruz,
                 # frontend'e type='cache_hit' olarak bildirmesi için özel dict yield ediyoruz.
@@ -355,6 +355,7 @@ class RAGPipeline:
             await self.cache.set(
                 question,
                 {"answer": full_answer, "sources": sources},
+                self._cache_namespace(doc_ids),
             )
 
         if trace:
@@ -435,6 +436,11 @@ class RAGPipeline:
                     parent_ids_seen.add(parent_id)
 
         return parent_chunks
+
+    def _cache_namespace(self, doc_ids: list[str] | None) -> str:
+        if not doc_ids:
+            return ""
+        return ",".join(sorted(doc_ids))
 
     def _extract_sources(self, chunks: list[dict]) -> list[dict]:
         """

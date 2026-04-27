@@ -11,10 +11,21 @@ const SendIco = () => (
 export default function MessageInput() {
   const [value, setValue] = useState('')
   const [focused, setFocused] = useState(false)
+  const documents = useDocumentStore(s => s.documents)
   const selectedDocumentIds = useDocumentStore(s => s.selectedDocumentIds)
   const documentIds = useMemo(() => [...selectedDocumentIds], [selectedDocumentIds])
   const { sendMessage, isStreaming } = useChat(documentIds.length > 0 ? documentIds : undefined)
   const ta = useRef<HTMLTextAreaElement>(null)
+
+  const hasDocuments = documents.length > 0
+  const hasSelection = selectedDocumentIds.size > 0
+  const inputDisabled = isStreaming || !hasDocuments || !hasSelection
+
+  const placeholder = !hasDocuments
+    ? 'Sohbet için önce belge yükleyin…'
+    : !hasSelection
+      ? 'Sohbet için en az bir belge seçin…'
+      : 'Belgelere bir soru sorun…'
 
   useEffect(() => {
     if (!ta.current) return
@@ -24,24 +35,25 @@ export default function MessageInput() {
 
   function submit() {
     const trimmed = value.trim()
-    if (!trimmed || isStreaming) return
+    if (!trimmed || inputDisabled) return
     sendMessage(trimmed)
     setValue('')
     if (ta.current) ta.current.style.height = 'auto'
   }
 
-  const sendDisabled = isStreaming || !value.trim()
+  const sendDisabled = inputDisabled || !value.trim()
 
   return (
     <div style={{ padding: '8px 24px 22px' }}>
       <div style={{ maxWidth: 760, margin: '0 auto' }}>
         <div style={{
           position: 'relative',
-          border: focused ? '1px solid var(--accent-border-soft-strong)' : '1px solid var(--b-10)',
-          background: 'var(--panel)',
+          border: focused && !inputDisabled ? '1px solid var(--accent-border-soft-strong)' : '1px solid var(--b-10)',
+          background: inputDisabled ? 'var(--b-04)' : 'var(--panel)',
           borderRadius: 14,
-          boxShadow: focused ? '0 0 0 4px var(--accent-softer)' : 'none',
-          transition: 'border-color .15s, box-shadow .15s',
+          boxShadow: focused && !inputDisabled ? '0 0 0 4px var(--accent-softer)' : 'none',
+          transition: 'border-color .15s, box-shadow .15s, background .15s',
+          opacity: inputDisabled && !isStreaming ? 0.55 : 1,
         }}>
           <textarea
             ref={ta}
@@ -52,18 +64,20 @@ export default function MessageInput() {
             onKeyDown={e => {
               if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit() }
             }}
-            placeholder="Belgelere bir soru sorun…"
+            placeholder={placeholder}
             rows={1}
-            disabled={isStreaming}
+            disabled={inputDisabled}
             style={{
               display: 'block', width: '100%',
               resize: 'none', border: 0, outline: 'none',
-              background: 'transparent', color: '#fff',
+              background: 'transparent',
+              color: inputDisabled ? 'var(--txt-3)' : '#fff',
               fontFamily: 'inherit', fontSize: 15, lineHeight: 1.5,
               letterSpacing: '-.005em',
               padding: '14px 56px 14px 16px',
               minHeight: 50, maxHeight: 160,
               overflow: 'hidden',
+              cursor: inputDisabled ? 'not-allowed' : 'text',
             }}
           />
           <button
