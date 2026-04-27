@@ -27,7 +27,7 @@ export default function Header({ inspectorOpen, onToggleInspector }: HeaderProps
         }}>
           <SparkleIco />
         </div>
-        <span style={{ fontSize: 14, fontWeight: 500, letterSpacing: '-.01em', color: '#fff' }}>YZTA</span>
+        <span style={{ fontSize: 14, fontWeight: 500, letterSpacing: '-.01em', color: '#fff' }}>YZTA-P2P-RAG</span>
       </div>
 
       <button

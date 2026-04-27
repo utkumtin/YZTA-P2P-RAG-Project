@@ -108,7 +108,7 @@ async def upload_documents(
                 await f.write(contents)
 
             job = await arq_redis.enqueue_job(
-                "ingest_document", document_id, save_path, sanitized_filename
+                "ingest_document", document_id, save_path, sanitized_filename, session_id
             )
             # doc_id → job_id mapping: delete endpoint'inin Redis cleanup yapabilmesi için
             await arq_redis.set(f"doc:{document_id}:job_id", job.job_id)

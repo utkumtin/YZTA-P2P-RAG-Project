@@ -23,6 +23,9 @@ services:
     restart: unless-stopped
 
   worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     image: p2p-rag-project-backend:latest
     command: arq app.workers.ingestion_worker.WorkerSettings
     env_file:

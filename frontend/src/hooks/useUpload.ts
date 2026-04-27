@@ -2,6 +2,7 @@ import { useState, useCallback, useRef } from 'react';
 import axios from 'axios';
 import { validateFile } from '../utils/validators';
 import { DOC_STATUS, UPLOAD_POLL_INTERVAL_MS } from '../utils/constants';
+import { getSessionId } from '../utils/session';
 
 export type UploadStatus = 'idle' | 'uploading' | 'processing' | 'done' | 'error';
 
@@ -34,7 +35,7 @@ export interface UseUploadReturn {
   uploads: UploadedFile[];
   isUploading: boolean;
   uploadFiles: (files: File[]) => Promise<void>;
-  removeUpload: (documentId: string) => void;
+  removeUpload: (documentId: string) => Promise<void>;
   clearUploads: () => void;
 }
 
@@ -57,7 +58,8 @@ export function useUpload(): UseUploadReturn {
 
     const interval = setInterval(async () => {
       try {
-        const response = await axios.get<DocumentListResponse>('/api/routes/documents');
+        const sessionId = getSessionId();
+        const response = await axios.get<DocumentListResponse>(`/api/routes/documents?session_id=${encodeURIComponent(sessionId)}`);
         const doc = response.data.documents.find((d) => d.document_id === documentId);
 
         if (!doc) return;
@@ -119,8 +121,9 @@ export function useUpload(): UseUploadReturn {
     }
 
     try {
+      const sessionId = getSessionId();
       const response = await axios.post<DocumentUploadResponse[]>(
-        '/api/routes/upload',
+        `/api/routes/upload?session_id=${encodeURIComponent(sessionId)}`,
         formData,
         { headers: { 'Content-Type': 'multipart/form-data' } }
       );
@@ -155,9 +158,17 @@ export function useUpload(): UseUploadReturn {
     }
   }, [startPolling]);
 
-  const removeUpload = useCallback((documentId: string) => {
+  const removeUpload = useCallback(async (documentId: string) => {
     stopPolling(documentId);
     setUploads((prev) => prev.filter((u) => u.document_id !== documentId));
+    try {
+      const sessionId = getSessionId();
+      await axios.delete(
+        `/api/routes/documents/${documentId}?session_id=${encodeURIComponent(sessionId)}`
+      );
+    } catch {
+      // Silme hatası sessizce geç — kullanıcı tekrar deneyebilir
+    }
   }, [stopPolling]);
 
   const clearUploads = useCallback(() => {

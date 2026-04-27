@@ -15,7 +15,7 @@ settings = get_settings()
 logger = logging.getLogger(__name__)
 
 
-async def ingest_document(ctx: dict, document_id: str, file_path: str, original_filename: str | None = None) -> dict:
+async def ingest_document(ctx: dict, document_id: str, file_path: str, original_filename: str | None = None, session_id: str = "default") -> dict:
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"File not found: {file_path}")
 
@@ -36,7 +36,7 @@ async def ingest_document(ctx: dict, document_id: str, file_path: str, original_
         result = await pipeline.ingest_document(
             file_path=file_path,
             doc_id=document_id,
-            session_id="default",
+            session_id=session_id,
             original_filename=original_filename,
         )
         await _write_progress("indexing", 80)

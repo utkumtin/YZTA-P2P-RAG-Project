@@ -25,9 +25,9 @@ KURALLAR:
 1. YALNIZCA aşağıda verilen kaynaklardaki bilgilere dayanarak cevap ver.
 2. Eğer kaynaklar soruyu cevaplamak için yeterli değilse, bunu açıkça belirt.
    Asla bilgiyi uydurma veya tahmin yürütme.
-3. Cevabını verirken hangi kaynak(lar)dan yararlandığını belirt.
-4. Türkçe soru sorulursa Türkçe, İngilizce sorulursa İngilizce cevap ver.
-5. Cevabın kısa ve öz olsun. Gereksiz tekrar yapma."""
+3. Türkçe soru sorulursa Türkçe, İngilizce sorulursa İngilizce cevap ver.
+4. Cevabın kısa ve öz olsun. Gereksiz tekrar yapma.
+5. Cevabında asla "[KAYNAK ...]" gibi ibareler kullanma. Kaynak bilgisi ayrıca gösterilecektir."""
 
 SUMMARY_SYSTEM_PROMPT = """Sen bir doküman özetleme asistanısın. Görevin, verilen metin
 parçalarını kapsamlı ve doğru bir şekilde özetlemektir.

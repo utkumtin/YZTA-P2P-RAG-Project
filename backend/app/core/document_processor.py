@@ -239,48 +239,60 @@ class DocumentProcessor:
     def _process_docx(self, file_path: str) -> list[dict]:
         """
         DOCX dosyasını parse eder.
-        Paragraflar, başlıklar ve tablolar ayrı ayrı çıkarılır.
+        Paragraflar, başlıklar ve tablolar (nested dahil) belge sırasıyla çıkarılır.
 
-        Başlık hiyerarşisi Markdown formatında korunur:
-        - Heading 1 → # Başlık
-        - Heading 2 → ## Alt Başlık
-        Bu chunking aşamasında anlamsal bölünme için değerli.
-
-        Tablolar düz metne dönüştürülür:
-        - Her satır bir satır
-        - Hücreler " | " ile ayrılır
-        Bu format embedding modelinin tabloyu anlamasını kolaylaştırır.
+        Başlık hiyerarşisi Markdown formatında korunur.
+        Tablolar düz metne dönüştürülür (hücreler " | " ile ayrılır).
+        Nested tablolar recursive olarak işlenir — üst düzey doc.tables atlar bunları.
         """
         try:
             doc = Document(file_path)
         except Exception as e:
             raise DocumentProcessingError(f"DOCX açılamadı: {e}")
 
-        content_blocks = []
-        current_heading = ""
+        from docx.oxml.ns import qn
 
-        # Paragrafları işle
-        for paragraph in doc.paragraphs:
-            if paragraph.style.name.startswith("Heading"):
-                current_heading = paragraph.text
-                if paragraph.text.strip():
-                    # Başlık seviyesini çıkar
-                    level_str = paragraph.style.name.replace("Heading ", "").strip()
-                    level = int(level_str) if level_str.isdigit() else 1
-                    # Markdown formatında işaretle
-                    content_blocks.append(f"{'#' * level} {paragraph.text}")
-            elif paragraph.text.strip():
-                content_blocks.append(paragraph.text)
-
-        # Tabloları işle
-        for table in doc.tables:
+        def extract_table_text(tbl_element) -> str:
+            """Nested tablolar dahil tüm tablo içeriğini çıkarır."""
             rows = []
-            for row in table.rows:
-                cells = [cell.text.strip() for cell in row.cells]
-                rows.append(" | ".join(cells))
-            table_text = "\n".join(rows)
-            if table_text.strip():
-                content_blocks.append(table_text)
+            for tr in tbl_element.findall(f".//{qn('w:tr')}"):
+                cells = []
+                for tc in tr.findall(f".//{qn('w:tc')}"):
+                    # Hücre içindeki tüm metni al (nested table'lar dahil)
+                    texts = []
+                    for p in tc.findall(f".//{qn('w:p')}"):
+                        t = "".join(r.text or "" for r in p.findall(f".//{qn('w:t')}"))
+                        if t.strip():
+                            texts.append(t.strip())
+                    cells.append(" ".join(texts))
+                row_text = " | ".join(c for c in cells if c)
+                if row_text.strip():
+                    rows.append(row_text)
+            return "\n".join(rows)
+
+        content_blocks = []
+
+        # Belge gövdesindeki üst düzey elementleri sırayla işle
+        body = doc.element.body
+        for child in body:
+            tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
+
+            if tag == "p":
+                # Paragraf
+                from docx.text.paragraph import Paragraph
+                para = Paragraph(child, doc)
+                if para.style.name.startswith("Heading") and para.text.strip():
+                    level_str = para.style.name.replace("Heading ", "").strip()
+                    level = int(level_str) if level_str.isdigit() else 1
+                    content_blocks.append(f"{'#' * level} {para.text}")
+                elif para.text.strip():
+                    content_blocks.append(para.text)
+
+            elif tag == "tbl":
+                # Üst düzey tablo (nested tablolar bu çağrı içinde recursive işlenir)
+                table_text = extract_table_text(child)
+                if table_text.strip():
+                    content_blocks.append(table_text)
 
         full_text = "\n\n".join(content_blocks)
 
