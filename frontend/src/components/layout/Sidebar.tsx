@@ -1,5 +1,6 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { useUpload } from '../../hooks/useUpload'
+import { useDocumentStore } from '../../store/documentStore'
 import { validateFile } from '../../utils/validators'
 
 const SearchIco = () => (
@@ -28,17 +29,51 @@ const XIco = () => (
   </svg>
 )
 
+const CheckIco = ({ checked }: { checked: boolean }) => (
+  <span style={{
+    flexShrink: 0, width: 16, height: 16, borderRadius: 5,
+    border: checked ? 'none' : '1.5px solid var(--b-12)',
+    background: checked ? 'var(--accent-fg)' : 'transparent',
+    display: 'grid', placeItems: 'center',
+    transition: 'background .12s, border .12s',
+    color: '#1a1320',
+  }}>
+    {checked && (
+      <svg width="9" height="9" viewBox="0 0 10 10" fill="none">
+        <path d="M2 5l2.5 2.5L8 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    )}
+  </span>
+)
+
 export default function Sidebar() {
   const { uploads, uploadFiles, removeUpload } = useUpload()
+  const {
+    selectedDocumentIds,
+    toggleDocumentSelection,
+    setDocumentSelection,
+    clearDocumentSelection,
+  } = useDocumentStore()
   const inputRef = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
   const [q, setQ] = useState('')
+  const autoSelectedRef = useRef<Set<string>>(new Set())
 
   function handleFiles(fileList: FileList | null) {
     if (!fileList) return
     const valid = Array.from(fileList).filter(f => validateFile(f).valid)
     if (valid.length > 0) uploadFiles(valid)
   }
+
+  // Auto-select newly completed docs
+  useEffect(() => {
+    uploads
+      .filter(u => u.status === 'done' && !autoSelectedRef.current.has(u.document_id))
+      .forEach(u => {
+        autoSelectedRef.current.add(u.document_id)
+        setDocumentSelection(u.document_id, true)
+      })
+  }, [uploads, setDocumentSelection])
 
   const allDocs = uploads.map(u => ({
     id: u.document_id,
@@ -47,7 +82,24 @@ export default function Sidebar() {
     progress: u.status === 'processing' ? 0.5 : u.status === 'uploading' ? 0.2 : 1,
   }))
 
+  const doneDocs = allDocs.filter(d => d.status === 'done')
+  const allSelected = doneDocs.length > 0 && doneDocs.every(d => selectedDocumentIds.has(d.id))
+
+  const toggleAll = () => {
+    if (allSelected) {
+      clearDocumentSelection()
+    } else {
+      doneDocs.forEach(d => setDocumentSelection(d.id, true))
+    }
+  }
+
   const filtered = allDocs.filter(d => d.name.toLowerCase().includes(q.toLowerCase()))
+
+  function handleRemove(docId: string) {
+    setDocumentSelection(docId, false)
+    autoSelectedRef.current.delete(docId)
+    removeUpload(docId)
+  }
 
   return (
     <aside style={{
@@ -63,8 +115,19 @@ export default function Sidebar() {
           <div style={{ fontSize: 13.5, fontWeight: 500, color: '#fff', letterSpacing: '-.005em' }}>
             Belgeler
           </div>
-          {allDocs.length > 0 && (
-            <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>{allDocs.length} belge</span>
+          {doneDocs.length > 0 && (
+            <button
+              onClick={toggleAll}
+              style={{
+                appearance: 'none', cursor: 'pointer',
+                fontSize: 12, color: 'var(--accent-fg)',
+                background: 'var(--accent-softer)',
+                border: '1px solid var(--accent-border-soft)',
+                padding: '3px 9px', borderRadius: 6, letterSpacing: '-.005em',
+              }}
+            >
+              {allSelected ? 'Tümünü kaldır' : 'Tümünü seç'}
+            </button>
           )}
         </div>
 
@@ -126,6 +189,13 @@ export default function Sidebar() {
             }}
           />
         </div>
+
+        {/* Selection summary */}
+        {selectedDocumentIds.size > 0 && (
+          <div style={{ marginTop: 10, fontSize: 12, color: 'var(--accent-fg)', letterSpacing: '-.005em' }}>
+            {selectedDocumentIds.size} belge seçili
+          </div>
+        )}
       </div>
 
       {/* Document list */}
@@ -139,7 +209,9 @@ export default function Sidebar() {
           <DocItem
             key={doc.id}
             doc={doc}
-            onRemove={() => removeUpload(doc.id)}
+            selected={selectedDocumentIds.has(doc.id)}
+            onToggle={() => toggleDocumentSelection(doc.id)}
+            onRemove={() => handleRemove(doc.id)}
           />
         ))}
       </div>
@@ -149,20 +221,32 @@ export default function Sidebar() {
 
 interface DocItemProps {
   doc: { id: string; name: string; status: string; progress: number }
+  selected: boolean
+  onToggle: () => void
   onRemove: () => void
 }
 
-function DocItem({ doc, onRemove }: DocItemProps) {
+function DocItem({ doc, selected, onToggle, onRemove }: DocItemProps) {
   const isIndexed = doc.status === 'done' || doc.status === 'completed'
   const isFailed = doc.status === 'error' || doc.status === 'failed'
 
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 10,
-      padding: '10px 12px', borderRadius: 8, marginBottom: 2,
-      border: '1px solid transparent',
-    }}>
-      <span style={{ color: 'var(--txt-3)', flexShrink: 0, display: 'flex' }}><DocIco /></span>
+    <div
+      onClick={isIndexed ? onToggle : undefined}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        padding: '10px 12px', borderRadius: 8, marginBottom: 2,
+        background: selected ? 'var(--accent-softer)' : 'transparent',
+        border: selected ? '1px solid var(--accent-border-soft)' : '1px solid transparent',
+        cursor: isIndexed ? 'pointer' : 'default',
+        transition: 'background .15s, border-color .15s',
+      }}
+    >
+      {isIndexed ? (
+        <CheckIco checked={selected} />
+      ) : (
+        <span style={{ color: 'var(--txt-3)', flexShrink: 0, display: 'flex' }}><DocIco /></span>
+      )}
       <div style={{ minWidth: 0, flex: 1 }}>
         <div style={{
           fontSize: 13.5, color: '#fff', fontWeight: 400, letterSpacing: '-.005em',

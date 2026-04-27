@@ -13,7 +13,6 @@ services:
     environment:
       HF_HOME: /app/models
     volumes:
-      - uploads_data:/app/uploads
       - models_data:/app/models
     depends_on:
       qdrant:
@@ -33,7 +32,6 @@ services:
     environment:
       HF_HOME: /app/models
     volumes:
-      - uploads_data:/app/uploads
       - models_data:/app/models
     depends_on:
       backend:
@@ -59,16 +57,12 @@ services:
     ports:
       - "6333:6333"
       - "6334:6334"
-    volumes:
-      - qdrant_data:/qdrant/storage
     restart: unless-stopped
 
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
-    volumes:
-      - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -77,7 +71,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  uploads_data:
   models_data:
-  qdrant_data:
-  redis_data:

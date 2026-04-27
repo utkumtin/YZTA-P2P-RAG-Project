@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { useChat } from '../../hooks/useChat'
+import { useDocumentStore } from '../../store/documentStore'
 
 const SendIco = () => (
   <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
@@ -10,7 +11,9 @@ const SendIco = () => (
 export default function MessageInput() {
   const [value, setValue] = useState('')
   const [focused, setFocused] = useState(false)
-  const { sendMessage, isStreaming } = useChat()
+  const selectedDocumentIds = useDocumentStore(s => s.selectedDocumentIds)
+  const documentIds = useMemo(() => [...selectedDocumentIds], [selectedDocumentIds])
+  const { sendMessage, isStreaming } = useChat(documentIds.length > 0 ? documentIds : undefined)
   const ta = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
