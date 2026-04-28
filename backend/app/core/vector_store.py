@@ -397,6 +397,50 @@ class VectorStore:
 
         return list(seen.values())
 
+    def search_children_by_parent_ids(
+        self,
+        answer_dense: list[float],
+        parent_chunk_ids: list[str],
+        top_k: int = 25,
+    ) -> dict[str, str]:
+        """
+        Cevap vektörüne en yakın child chunk'ı her parent için döndürür.
+
+        Args:
+            answer_dense: LLM cevabının dense embedding vektörü
+            parent_chunk_ids: Zaten retrieve edilmiş parent chunk_id'leri
+            top_k: Aranacak toplam child sayısı (parent sayısı * ~5 yeterli)
+
+        Returns:
+            {parent_chunk_id: en_alakalı_child_metni}
+        """
+        if not parent_chunk_ids:
+            return {}
+
+        results = self.client.query_points(
+            collection_name=self.CHILD_COLLECTION,
+            query=answer_dense,
+            using="dense",
+            query_filter=Filter(
+                must=[
+                    FieldCondition(
+                        key="parent_chunk_id",
+                        match=MatchAny(any=parent_chunk_ids),
+                    )
+                ]
+            ),
+            limit=top_k,
+        )
+
+        # Sıralama score'a göre azalan — her parent için ilk = en iyi
+        best_by_parent: dict[str, str] = {}
+        for hit in results.points:
+            pid = hit.payload.get("parent_chunk_id")
+            if pid and pid not in best_by_parent:
+                best_by_parent[pid] = hit.payload.get("text", "")
+
+        return best_by_parent
+
     def delete_document(self, doc_id: str, session_id: str):
         """
         Bir dokümanın tüm chunk'larını siler (child + parent).

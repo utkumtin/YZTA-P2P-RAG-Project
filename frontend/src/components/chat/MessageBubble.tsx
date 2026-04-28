@@ -1,3 +1,5 @@
+import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import type { Message, Source } from '../../types/chat'
 import StreamingIndicator from './StreamingIndicator'
 
@@ -35,22 +37,103 @@ function CitationChip({
   source: Source
   onHover?: (src: Source | null) => void
 }) {
+  const [open, setOpen] = useState(false)
+  const chipRef = useRef<HTMLSpanElement>(null)
+  const popoverRef = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState({ top: 0, left: 0, width: 0 })
+  const hasChunk = !!source.chunk_text
+
+  useEffect(() => {
+    if (!open) return
+    function handleDown(e: MouseEvent) {
+      if (
+        chipRef.current?.contains(e.target as Node) ||
+        popoverRef.current?.contains(e.target as Node)
+      ) return
+      setOpen(false)
+    }
+    document.addEventListener('mousedown', handleDown)
+    return () => document.removeEventListener('mousedown', handleDown)
+  }, [open])
+
+  function handleClick(e: React.MouseEvent) {
+    if (!hasChunk) return
+    e.stopPropagation()
+    const rect = chipRef.current?.getBoundingClientRect()
+    if (rect) setPos({ top: rect.bottom + 6, left: rect.left, width: rect.width })
+    setOpen(o => !o)
+  }
+
   return (
-    <span
-      onMouseEnter={() => onHover?.(source)}
-      onMouseLeave={() => onHover?.(null)}
-      style={{
-        display: 'inline-flex', alignItems: 'center',
-        fontSize: 11, fontWeight: 500,
-        padding: '1px 6px', margin: '0 2px',
-        background: 'var(--accent-soft)',
-        color: 'var(--accent-fg)',
-        borderRadius: 4, cursor: 'default',
-        verticalAlign: 'baseline',
-      }}
-    >
-      {n}
-    </span>
+    <>
+      <span
+        ref={chipRef}
+        onMouseEnter={() => onHover?.(source)}
+        onMouseLeave={() => onHover?.(null)}
+        onClick={handleClick}
+        style={{
+          display: 'inline-flex', alignItems: 'center',
+          fontSize: 11, fontWeight: 500,
+          padding: '1px 6px', margin: '0 2px',
+          background: open ? 'var(--accent-fg)' : 'var(--accent-soft)',
+          color: open ? '#1a1320' : 'var(--accent-fg)',
+          borderRadius: 4,
+          cursor: hasChunk ? 'pointer' : 'default',
+          verticalAlign: 'baseline',
+          transition: 'background .12s, color .12s',
+          userSelect: 'none',
+        }}
+      >
+        {n}
+      </span>
+
+      {open && hasChunk && createPortal(
+        <div
+          ref={popoverRef}
+          style={{
+            position: 'fixed',
+            top: pos.top,
+            left: Math.max(8, Math.min(pos.left, window.innerWidth - 344)),
+            width: 336,
+            zIndex: 9999,
+            background: 'var(--panel)',
+            border: '1px solid var(--accent-border-soft)',
+            borderRadius: 10,
+            boxShadow: '0 8px 32px rgba(0,0,0,.45)',
+            overflow: 'hidden',
+          }}
+        >
+          <div style={{
+            padding: '8px 12px',
+            borderBottom: '1px solid var(--b-06)',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          }}>
+            <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--accent-fg)' }}>
+              [{n}] {source.filename}
+            </span>
+            <button
+              onClick={() => setOpen(false)}
+              style={{
+                background: 'transparent', border: 'none',
+                color: 'var(--txt-3)', cursor: 'pointer',
+                fontSize: 14, lineHeight: 1, padding: '0 2px',
+              }}
+            >×</button>
+          </div>
+          <div style={{
+            padding: '10px 12px',
+            fontSize: 12.5, lineHeight: 1.6,
+            color: 'rgba(255,255,255,.8)',
+            maxHeight: 260, overflowY: 'auto',
+            whiteSpace: 'pre-wrap',
+            letterSpacing: '-.003em',
+          }}>
+            {source.chunk_text}
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
   )
 }
 

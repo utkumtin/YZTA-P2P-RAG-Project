@@ -32,9 +32,9 @@ async def chat(request: ChatRequest, req: Request):
 
     sources = [
         SourceInfo(
-            document_id=s.get("doc_id", ""),
+            document_id=s.get("document_id", ""),
             filename=s.get("filename", ""),
-            chunk_text="",
+            chunk_text=s.get("chunk_text", ""),
         )
         for s in raw_sources
     ]

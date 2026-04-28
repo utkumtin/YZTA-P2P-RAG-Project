@@ -90,13 +90,6 @@ export default function Inspector({ hoverSrc, messages, sourceRegistry, onClose 
                     }}>
                       {s.filename || 'Belge'}
                     </div>
-                    {s.chunk_text && (
-                      <div style={{
-                        fontSize: 12, color: 'var(--txt-3)', marginTop: 4, lineHeight: 1.5,
-                      }}>
-                        {s.chunk_text.length > 160 ? s.chunk_text.slice(0, 160) + '…' : s.chunk_text}
-                      </div>
-                    )}
                   </div>
                 </div>
               )

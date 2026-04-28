@@ -264,7 +264,7 @@ class RAGPipeline:
         if generation:
             generation.end(output=answer)
 
-        # Kaynak bilgisini çıkar
+        self._assign_retroactive_citations(question, answer, context_chunks)
         sources = self._extract_sources(context_chunks)
 
         # 7. Cache'e kaydet
@@ -348,7 +348,8 @@ class RAGPipeline:
         if generation:
             generation.end(output=full_answer)
 
-        # Stream bittikten sonra kaynakları yield et, ardından cache'e kaydet
+        # Stream bittikten sonra cevaba göre retroaktif citation ata, ardından kaynakları yield et
+        self._assign_retroactive_citations(question, full_answer, context_chunks)
         sources = self._extract_sources(context_chunks)
         yield {"__sources__": sources}
         if self.cache:
@@ -432,10 +433,39 @@ class RAGPipeline:
             if parent_id and parent_id not in parent_ids_seen:
                 parent = self.vector_store.get_parent_by_id(parent_id)
                 if parent:
+                    # En alakalı child metnini citation için taşı (rerank sıralaması zaten en iyiyi öne koydu)
+                    parent["_child_text"] = child.get("text", "")
                     parent_chunks.append(parent)
                     parent_ids_seen.add(parent_id)
 
         return parent_chunks
+
+    def _assign_retroactive_citations(self, question: str, answer: str, context_chunks: list[dict]) -> None:
+        """
+        Soru + cevaba en yakın child chunk'ı her parent için bulup _child_text'i günceller.
+
+        Neden soru+cevap birlikte embed ediliyor:
+        Sadece cevabı embed etmek, infobox/tablo gibi anahtar kelime açısından zengin
+        ama cümle yapısı olmayan chunk'ların yanlış seçilmesine yol açabilir.
+        Soruyu cevaba eklemek, "mezun oldu", "rütbeye terfi etti" gibi fiil yapılarını
+        da aramaya dahil ederek body metnindeki gerçek cümleye çok daha kesin yaklaşır.
+        """
+        parent_ids = [c.get("chunk_id") for c in context_chunks if c.get("chunk_id")]
+        if not parent_ids:
+            return
+
+        citation_query = f"{question} {answer}"
+        answer_vec = self.embedder.embed(citation_query).tolist()
+        best_children = self.vector_store.search_children_by_parent_ids(
+            answer_vec,
+            parent_ids,
+            top_k=len(parent_ids) * 5,
+        )
+
+        for chunk in context_chunks:
+            pid = chunk.get("chunk_id")
+            if pid and pid in best_children:
+                chunk["_child_text"] = best_children[pid]
 
     def _cache_namespace(self, doc_ids: list[str] | None) -> str:
         if not doc_ids:
@@ -457,9 +487,10 @@ class RAGPipeline:
             seen.add(doc_id)
             sources.append(
                 {
+                    "document_id": doc_id,
                     "filename": meta.get("filename", "Bilinmeyen"),
                     "page_number": meta.get("page_number"),
-                    "doc_id": doc_id,
+                    "chunk_text": chunk.get("_child_text") or chunk.get("text", ""),
                 }
             )
         return sources
