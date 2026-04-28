@@ -1,5 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import os
 
@@ -54,8 +55,8 @@ async def lifespan(app: FastAPI):
             await sc.load_from_redis()
             app.state.semantic_cache = sc
             app.state.redis_client = redis_client
-        except Exception:
-            pass
+        except Exception as cache_err:
+            logging.getLogger(__name__).warning(f"Semantic cache başlatılamadı: {cache_err}")
 
     app.state.rag_pipeline = None
     try:
@@ -105,6 +106,17 @@ app = FastAPI(
     debug=settings.DEBUG,
     lifespan=lifespan,
 )
+
+_MAX_BODY_BYTES = settings.MAX_FILE_SIZE_MB * 1024 * 1024 * 10  # 10x max file size as request ceiling
+
+
+@app.middleware("http")
+async def limit_body_size(request: Request, call_next):
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > _MAX_BODY_BYTES:
+        return JSONResponse(status_code=413, content={"detail": "İstek gövdesi çok büyük."})
+    return await call_next(request)
+
 
 app.add_middleware(
     CORSMiddleware,

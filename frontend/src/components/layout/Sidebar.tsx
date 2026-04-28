@@ -157,7 +157,7 @@ export default function Sidebar() {
           <span style={{ textAlign: 'left' }}>
             <span style={{ display: 'block', fontSize: 13, color: '#fff' }}>Belge ekle</span>
             <span style={{ display: 'block', fontSize: 11.5, color: 'var(--txt-3)', marginTop: 2 }}>
-              PDF · DOCX · TXT
+              PDF · DOCX · DOC · TXT · maks 50 MB
             </span>
           </span>
           <input

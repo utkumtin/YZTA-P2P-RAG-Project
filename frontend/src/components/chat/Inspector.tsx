@@ -1,8 +1,10 @@
+import { useMemo } from 'react'
 import type { Message, Source } from '../../types/chat'
 
 interface InspectorProps {
   hoverSrc: Source | null
   messages: Message[]
+  sourceRegistry: Map<string, number>
   onClose: () => void
 }
 
@@ -19,9 +21,18 @@ const subtleBtn: React.CSSProperties = {
   color: 'var(--txt-2)', display: 'grid', placeItems: 'center',
 }
 
-export default function Inspector({ hoverSrc, messages, onClose }: InspectorProps) {
-  const last = [...messages].reverse().find(m => m.role === 'assistant')
-  const sources = last?.sources ?? []
+export default function Inspector({ hoverSrc, messages, sourceRegistry, onClose }: InspectorProps) {
+  // Tüm sohbetteki benzersiz kaynaklar, ilk görünüş sırasına göre
+  const sources = useMemo(() => {
+    const seen = new Map<string, Source>()
+    for (const msg of messages) {
+      for (const src of msg.sources ?? []) {
+        const key = src.document_id || src.filename
+        if (!seen.has(key)) seen.set(key, src)
+      }
+    }
+    return [...seen.values()]
+  }, [messages])
 
   return (
     <div style={{
@@ -55,6 +66,7 @@ export default function Inspector({ hoverSrc, messages, onClose }: InspectorProp
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {sources.map((s, i) => {
               const isHovered = hoverSrc === s
+              const idx = sourceRegistry.get(s.document_id || s.filename) ?? i + 1
               return (
                 <div key={i} style={{
                   border: `1px solid ${isHovered ? 'var(--accent-border-soft)' : 'var(--b-06)'}`,
@@ -68,7 +80,7 @@ export default function Inspector({ hoverSrc, messages, onClose }: InspectorProp
                     background: 'var(--accent-soft)',
                     padding: '1px 6px', borderRadius: 4, flexShrink: 0, marginTop: 1,
                   }}>
-                    {i + 1}
+                    {idx}
                   </span>
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{

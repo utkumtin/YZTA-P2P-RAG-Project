@@ -11,21 +11,17 @@ const SendIco = () => (
 export default function MessageInput() {
   const [value, setValue] = useState('')
   const [focused, setFocused] = useState(false)
-  const documents = useDocumentStore(s => s.documents)
   const selectedDocumentIds = useDocumentStore(s => s.selectedDocumentIds)
   const documentIds = useMemo(() => [...selectedDocumentIds], [selectedDocumentIds])
   const { sendMessage, isStreaming } = useChat(documentIds.length > 0 ? documentIds : undefined)
   const ta = useRef<HTMLTextAreaElement>(null)
 
-  const hasDocuments = documents.length > 0
   const hasSelection = selectedDocumentIds.size > 0
-  const inputDisabled = isStreaming || !hasDocuments || !hasSelection
+  const inputDisabled = isStreaming || !hasSelection
 
-  const placeholder = !hasDocuments
-    ? 'Sohbet için önce belge yükleyin…'
-    : !hasSelection
-      ? 'Sohbet için en az bir belge seçin…'
-      : 'Belgelere bir soru sorun…'
+  const placeholder = !hasSelection
+    ? 'Sohbet için belge yükleyin ve seçin…'
+    : 'Belgelere bir soru sorun…'
 
   useEffect(() => {
     if (!ta.current) return

@@ -10,6 +10,7 @@ interface ChatStore {
   setSources: (id: string, sources: Source[]) => void
   setStreaming: (id: string, val: boolean) => void
   setIsStreaming: (val: boolean) => void
+  clearMessages: () => void
 }
 
 export const useChatStore = create<ChatStore>((set) => ({
@@ -42,4 +43,6 @@ export const useChatStore = create<ChatStore>((set) => ({
     })),
 
   setIsStreaming: (val) => set({ isStreaming: val }),
+
+  clearMessages: () => set({ messages: [], isStreaming: false }),
 }))

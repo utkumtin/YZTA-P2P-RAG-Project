@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useChatStore } from './store/chatStore'
 import Header from './components/layout/Header'
 import Sidebar from './components/layout/Sidebar'
@@ -15,6 +15,20 @@ export default function App() {
   const [hoverSrc, setHoverSrc] = useState<Source | null>(null)
 
   const messages = useChatStore(s => s.messages)
+  const clearMessages = useChatStore(s => s.clearMessages)
+
+  // Global kaynak indeks haritası: document_id → sohbet geneli sıra numarası
+  const sourceRegistry = useMemo(() => {
+    const registry = new Map<string, number>()
+    let counter = 1
+    for (const msg of messages) {
+      for (const src of msg.sources ?? []) {
+        const key = src.document_id || src.filename
+        if (!registry.has(key)) registry.set(key, counter++)
+      }
+    }
+    return registry
+  }, [messages])
 
   useEffect(() => {
     const onR = () => setVw(window.innerWidth)
@@ -44,7 +58,7 @@ export default function App() {
       background: 'var(--bg)', color: '#fff', fontFamily: 'var(--sans)',
       overflow: 'hidden',
     }}>
-      <Header inspectorOpen={inspectorOpen} onToggleInspector={toggle} />
+      <Header inspectorOpen={inspectorOpen} onToggleInspector={toggle} onClear={clearMessages} />
 
       <div style={{
         display: 'grid',
@@ -54,12 +68,12 @@ export default function App() {
         {!veryNarrow && <Sidebar />}
 
         <div style={{ display: 'grid', gridTemplateRows: '1fr auto', minHeight: 0, overflow: 'hidden' }}>
-          <ChatWindow setHoverSrc={setHoverSrc} />
+          <ChatWindow setHoverSrc={setHoverSrc} sourceRegistry={sourceRegistry} />
           <MessageInput />
         </div>
 
         {inspectorInline && (
-          <Inspector hoverSrc={hoverSrc} messages={messages} onClose={toggle} />
+          <Inspector hoverSrc={hoverSrc} messages={messages} sourceRegistry={sourceRegistry} onClose={toggle} />
         )}
       </div>
 
@@ -75,7 +89,7 @@ export default function App() {
             boxShadow: '-12px 0 32px rgba(0,0,0,.4)',
             animation: 'yz-slide .22s ease-out',
           }}>
-            <Inspector hoverSrc={hoverSrc} messages={messages} onClose={toggle} />
+            <Inspector hoverSrc={hoverSrc} messages={messages} sourceRegistry={sourceRegistry} onClose={toggle} />
           </div>
         </>
       )}

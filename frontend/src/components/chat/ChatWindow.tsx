@@ -12,9 +12,10 @@ const SparkleIco = () => (
 
 interface ChatWindowProps {
   setHoverSrc: (src: Source | null) => void
+  sourceRegistry: Map<string, number>
 }
 
-export default function ChatWindow({ setHoverSrc }: ChatWindowProps) {
+export default function ChatWindow({ setHoverSrc, sourceRegistry }: ChatWindowProps) {
   const messages = useChatStore(s => s.messages)
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -61,7 +62,7 @@ export default function ChatWindow({ setHoverSrc }: ChatWindowProps) {
     <div style={{ flex: 1, overflowY: 'auto', padding: '32px 24px 8px' }}>
       <div style={{ maxWidth: 760, margin: '0 auto' }}>
         {messages.map(m => (
-          <MessageBubble key={m.id} message={m} onHoverSrc={setHoverSrc} />
+          <MessageBubble key={m.id} message={m} onHoverSrc={setHoverSrc} sourceRegistry={sourceRegistry} />
         ))}
         <div ref={bottomRef} />
       </div>

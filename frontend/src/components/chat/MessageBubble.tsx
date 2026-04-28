@@ -4,6 +4,7 @@ import StreamingIndicator from './StreamingIndicator'
 interface MessageBubbleProps {
   message: Message
   onHoverSrc?: (src: Source | null) => void
+  sourceRegistry: Map<string, number>
 }
 
 const SparkleIco = () => (
@@ -53,7 +54,7 @@ function CitationChip({
   )
 }
 
-export default function MessageBubble({ message, onHoverSrc }: MessageBubbleProps) {
+export default function MessageBubble({ message, onHoverSrc, sourceRegistry }: MessageBubbleProps) {
   const isUser = message.role === 'user'
 
   if (isUser) {
@@ -113,7 +114,12 @@ export default function MessageBubble({ message, onHoverSrc }: MessageBubbleProp
           {message.sources && message.sources.length > 0 && (
             <span style={{ marginLeft: 4 }}>
               {message.sources.map((s, i) => (
-                <CitationChip key={i} n={i + 1} source={s} onHover={onHoverSrc} />
+                <CitationChip
+                  key={i}
+                  n={sourceRegistry.get(s.document_id || s.filename) ?? i + 1}
+                  source={s}
+                  onHover={onHoverSrc}
+                />
               ))}
             </span>
           )}
