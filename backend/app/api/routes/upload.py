@@ -63,7 +63,8 @@ def validate_extension(filename: str) -> str:
     return ext
 
 
-def validate_file_content(ext: str, contents: bytes) -> None:
+def validate_file_content(ext: str, contents: bytes) -> bytes:
+    """İçerik doğrular; PDF'lerde preamble varsa siler. Temiz bytes döner."""
     max_bytes = settings.MAX_FILE_SIZE_MB * 1024 * 1024
     if len(contents) > max_bytes:
         raise HTTPException(
@@ -76,12 +77,23 @@ def validate_file_content(ext: str, contents: bytes) -> None:
 
     magic_signatures = _MAGIC.get(ext)
     if magic_signatures is not None:
+        # İlk 8 byte'ta eşleşme yoksa ilk 1024 byte'ı tara (ör. Java wrapper preamble)
         header = contents[:8]
         if not any(header.startswith(sig) for sig in magic_signatures):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Dosya içeriği .{ext} formatıyla eşleşmiyor (geçersiz magic bytes).",
-            )
+            scan_window = contents[:1024]
+            offset = -1
+            for sig in magic_signatures:
+                pos = scan_window.find(sig)
+                if pos != -1 and (offset == -1 or pos < offset):
+                    offset = pos
+            if offset == -1:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Dosya içeriği .{ext} formatıyla eşleşmiyor (geçersiz magic bytes).",
+                )
+            contents = contents[offset:]
+
+    return contents
 
 
 @router.post("", response_model=list[DocumentUploadResponse])
@@ -102,7 +114,7 @@ async def upload_documents(
 
         try:
             contents = await file.read()
-            validate_file_content(ext, contents)
+            contents = validate_file_content(ext, contents)
 
             async with aiofiles.open(save_path, "wb") as f:
                 await f.write(contents)
