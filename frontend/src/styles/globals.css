@@ -1,0 +1,44 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --bg: #141318;
+  --panel: #0e0d12;
+  --bubble: #1c1a22;
+  --txt-2: rgba(255,255,255,.7);
+  --txt-3: rgba(255,255,255,.5);
+  --txt-4: rgba(255,255,255,.35);
+  --b-12: rgba(255,255,255,.12);
+  --b-10: rgba(255,255,255,.10);
+  --b-08: rgba(255,255,255,.08);
+  --b-06: rgba(255,255,255,.06);
+  --b-04: rgba(255,255,255,.04);
+  --accent-fg: #b8a4f0;
+  --accent-soft: rgba(160,130,230,.10);
+  --accent-softer: rgba(160,130,230,.05);
+  --accent-border-soft: rgba(160,130,230,.25);
+  --accent-border-soft-strong: rgba(160,130,230,.50);
+}
+
+@keyframes yz-pulse { 0%,100%{opacity:.3} 50%{opacity:1} }
+@keyframes yz-slide { from{transform:translateX(20px);opacity:0} to{transform:translateX(0);opacity:1} }
+
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body, #root {
+    height: 100%;
+    margin: 0;
+    font-family: var(--sans);
+    background: var(--bg);
+    color: #fff;
+  }
+}
+
+::selection { background: var(--accent-soft); color: #fff; }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,.06); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.14); }
