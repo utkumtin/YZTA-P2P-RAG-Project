@@ -7,6 +7,7 @@ interface ChatStore {
   sessionId: string
   addMessage: (msg: Message) => void
   appendToken: (id: string, token: string) => void
+  setMessageContent: (id: string, content: string) => void
   setSources: (id: string, sources: Source[]) => void
   setStreaming: (id: string, val: boolean) => void
   setIsStreaming: (val: boolean) => void
@@ -25,6 +26,13 @@ export const useChatStore = create<ChatStore>((set) => ({
     set((state) => ({
       messages: state.messages.map((m) =>
         m.id === id ? { ...m, content: m.content + token } : m
+      ),
+    })),
+
+  setMessageContent: (id, content) =>
+    set((state) => ({
+      messages: state.messages.map((m) =>
+        m.id === id ? { ...m, content } : m
       ),
     })),
 

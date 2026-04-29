@@ -10,7 +10,7 @@ class SummarizeRequest(BaseModel):
 class SourceInfo(BaseModel):
     filename: str
     page_number: int | None = None
-    doc_id: str
+    document_id: str
 
 
 class SummarizeResponse(BaseModel):

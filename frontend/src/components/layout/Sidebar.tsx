@@ -1,7 +1,9 @@
 import { useRef, useState, useEffect } from 'react'
 import { useUpload } from '../../hooks/useUpload'
 import { useDocumentStore } from '../../store/documentStore'
+import { useSummarize } from '../../hooks/useSummarize'
 import { validateFile } from '../../utils/validators'
+import SummaryButton from '../summarize/SummarizePanel'
 
 const SearchIco = () => (
   <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
@@ -54,6 +56,7 @@ export default function Sidebar() {
     setDocumentSelection,
     clearDocumentSelection,
   } = useDocumentStore()
+  const { summarize, loading: summarizing, canSummarize } = useSummarize()
   const inputRef = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
   const [q, setQ] = useState('')
@@ -190,10 +193,18 @@ export default function Sidebar() {
           />
         </div>
 
+        {/* Summarize */}
+        <div style={{ marginTop: 10 }}>
+          <SummaryButton
+            disabled={!canSummarize}
+            onSummarize={summarize}
+          />
+        </div>
+
         {/* Selection summary */}
         {selectedDocumentIds.size > 0 && (
-          <div style={{ marginTop: 10, fontSize: 12, color: 'var(--accent-fg)', letterSpacing: '-.005em' }}>
-            {selectedDocumentIds.size} belge seçili
+          <div style={{ marginTop: 10, fontSize: 12, color: summarizing ? 'var(--txt-3)' : 'var(--accent-fg)', letterSpacing: '-.005em' }}>
+            {summarizing ? 'Özet hazırlanıyor…' : `${selectedDocumentIds.size} belge seçili`}
           </div>
         )}
       </div>
